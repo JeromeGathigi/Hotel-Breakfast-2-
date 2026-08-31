@@ -101,8 +101,8 @@ export interface DiningTable {
   occupiedPax?: number;
   occupiedSince?: string | null;
   mealService?: MealServiceType;
-  x?: number; // for visual map grid (0-100%)
-  y?: number;
+  x?: number; // viewBox coordinate X (drawing units)
+  y?: number; // viewBox coordinate Y (drawing units)
   shape?: 'rectangle' | 'square' | 'round' | 'booth' | 'diamond' | 'bar_seat' | 'lounge' | 'semi_circle';
   width?: number;
   height?: number;
@@ -116,6 +116,7 @@ export interface FloorFeature {
       | 'bar-counter' | 'banquette' | 'terrace' | 'smoking-terrace' | 'back-of-house';
   /** Empty string for anything the floor plan does not label. */
   label: string;
+  /** Coordinates and dimensions in viewBox drawing units (not percentages) */
   x: number; y: number; w: number; h: number;
   shape?: 'rect' | 'round';
   /** Rotate the label 90 degrees, for tall narrow units like the coffee stand. */

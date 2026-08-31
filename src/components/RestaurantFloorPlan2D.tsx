@@ -1,22 +1,17 @@
 import React, { useState, useMemo } from 'react';
 import { DiningTable, MealServiceType, FloorFeature } from '../types';
-import { NOVOTEL_FLOOR_FEATURES, IBIS_FLOOR_FEATURES } from '../constants';
+import { 
+  NOVOTEL_PLATE, 
+  IBIS_PLATE, 
+  NOVOTEL_FLOOR_FEATURES, 
+  IBIS_FLOOR_FEATURES 
+} from '../constants';
 import { 
   Users, 
-  Clock, 
   Cigarette, 
-  Utensils, 
-  Wine, 
-  Sparkles, 
-  Compass, 
-  Maximize2, 
-  Minimize2, 
   ZoomIn, 
   ZoomOut, 
   RotateCcw,
-  CheckCircle2,
-  AlertCircle,
-  Coffee,
   Check
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -48,6 +43,8 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
   const [hoveredTable, setHoveredTable] = useState<DiningTable | null>(null);
 
   const isIbis = hotelId === 'ibis';
+  const plate = isIbis ? IBIS_PLATE : NOVOTEL_PLATE;
+  const features = isIbis ? IBIS_FLOOR_FEATURES : NOVOTEL_FLOOR_FEATURES;
 
   // Filtered tables based on zone selection
   const visibleTables = useMemo(() => {
@@ -57,228 +54,470 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
     });
   }, [tables, selectedZone]);
 
-  const getStatusColor = (status: DiningTable['status']) => {
+  const getStatusStyles = (status: DiningTable['status']) => {
     switch (status) {
       case 'occupied':
         return {
-          bg: 'bg-accent/90 hover:bg-accent text-white',
-          border: 'border-accent shadow-md ring-2 ring-accent/30',
-          badge: 'bg-white/20 text-white',
-          chair: 'bg-accent/80',
+          fill: isIbis ? '#DC2626' : '#1D4ED8',
+          stroke: isIbis ? '#991B1B' : '#1E40AF',
+          textFill: '#FFFFFF',
+          subTextFill: 'rgba(255, 255, 255, 0.85)',
+          badgeBg: isIbis ? 'bg-red-600 text-white' : 'bg-blue-600 text-white',
           label: 'Occupied',
         };
       case 'available':
         return {
-          bg: 'bg-emerald-50 hover:bg-emerald-100 text-emerald-900',
-          border: 'border-emerald-500 shadow-xs ring-1 ring-emerald-300/40',
-          badge: 'bg-emerald-600 text-white',
-          chair: 'bg-emerald-300 border-emerald-400',
+          fill: '#ECFDF5',
+          stroke: '#059669',
+          textFill: '#064E3B',
+          subTextFill: '#047857',
+          badgeBg: 'bg-emerald-600 text-white',
           label: 'Available',
         };
       case 'reserved':
         return {
-          bg: 'bg-amber-50 hover:bg-amber-100 text-amber-950',
-          border: 'border-amber-500 shadow-xs ring-1 ring-amber-300/40',
-          badge: 'bg-amber-600 text-white',
-          chair: 'bg-amber-300 border-amber-400',
+          fill: '#FEF3C7',
+          stroke: '#D97706',
+          textFill: '#78350F',
+          subTextFill: '#B45309',
+          badgeBg: 'bg-amber-600 text-white',
           label: 'Reserved',
         };
       case 'cleaning':
         return {
-          bg: 'bg-slate-100 hover:bg-slate-200 text-slate-800',
-          border: 'border-slate-400 shadow-xs ring-1 ring-slate-300',
-          badge: 'bg-slate-500 text-white',
-          chair: 'bg-slate-300 border-slate-400',
+          fill: '#F1F5F9',
+          stroke: '#64748B',
+          textFill: '#1E293B',
+          subTextFill: '#475569',
+          badgeBg: 'bg-slate-500 text-white',
           label: 'Cleaning',
         };
     }
   };
 
-  const renderTableShape = (table: DiningTable) => {
+  const renderFeatureShape = (f: FloorFeature) => {
+    const isRound = f.shape === 'round';
+
+    switch (f.kind) {
+      case 'hostess-desk':
+      case 'front-desk':
+        return (
+          <g key={f.id} className="pointer-events-none select-none">
+            <rect
+              x={f.x}
+              y={f.y}
+              width={f.w}
+              height={f.h}
+              rx={4}
+              fill="#F8FAFC"
+              stroke="#1E293B"
+              strokeWidth={1.5}
+            />
+            {f.label && (
+              <text
+                x={f.x + f.w / 2}
+                y={f.y + f.h / 2 + 0.5}
+                textAnchor="middle"
+                dominantBaseline="central"
+                fill="#0F172A"
+                fontSize={9}
+                fontWeight="900"
+                className="font-mono-custom tracking-wider"
+              >
+                {f.label}
+              </text>
+            )}
+          </g>
+        );
+
+      case 'coffee-stand':
+        return (
+          <g key={f.id} className="pointer-events-none select-none">
+            <rect
+              x={f.x}
+              y={f.y}
+              width={f.w}
+              height={f.h}
+              rx={3}
+              fill="#FEF3C7"
+              stroke="#B45309"
+              strokeWidth={1.5}
+            />
+            {f.label && f.verticalLabel ? (
+              <text
+                x={f.x + f.w / 2}
+                y={f.y + f.h / 2}
+                textAnchor="middle"
+                dominantBaseline="central"
+                transform={`rotate(-90, ${f.x + f.w / 2}, ${f.y + f.h / 2})`}
+                fill="#78350F"
+                fontSize={8.5}
+                fontWeight="900"
+                className="font-mono-custom tracking-wider"
+              >
+                {f.label}
+              </text>
+            ) : f.label ? (
+              <text
+                x={f.x + f.w / 2}
+                y={f.y + f.h / 2 + 0.5}
+                textAnchor="middle"
+                dominantBaseline="central"
+                fill="#78350F"
+                fontSize={8.5}
+                fontWeight="900"
+                className="font-mono-custom"
+              >
+                {f.label}
+              </text>
+            ) : null}
+          </g>
+        );
+
+      case 'smoking-terrace':
+        return (
+          <g key={f.id} className="pointer-events-none select-none">
+            {/* Shaded Smoking Terrace Region */}
+            <rect
+              x={f.x}
+              y={f.y}
+              width={f.w}
+              height={f.h}
+              rx={6}
+              fill="#CFFAFE"
+              fillOpacity={0.85}
+              stroke="#0891B2"
+              strokeWidth={1.5}
+            />
+            {/* Header label & Smoking symbol */}
+            <g transform={`translate(${f.x + 12}, ${f.y + 16})`}>
+              <path
+                d="M0 0 L14 0 M17 0 L19 0 M17 4 L19 4 M0 4 L14 4 M0 0 L0 4 M14 0 L14 4"
+                fill="none"
+                stroke="#0E7490"
+                strokeWidth={1.2}
+              />
+              <text
+                x={24}
+                y={3}
+                fill="#0E7490"
+                fontSize={8.5}
+                fontWeight="900"
+                dominantBaseline="central"
+                className="font-mono-custom tracking-wider"
+              >
+                SMOKING AREA
+              </text>
+            </g>
+            {/* 4 unlabelled non-seatable tables inside smoking terrace */}
+            <circle cx={455} cy={355} r={11} fill="#FFFFFF" fillOpacity={0.85} stroke="#0891B2" strokeWidth={1.2} />
+            <circle cx={500} cy={355} r={11} fill="#FFFFFF" fillOpacity={0.85} stroke="#0891B2" strokeWidth={1.2} />
+            <circle cx={455} cy={400} r={11} fill="#FFFFFF" fillOpacity={0.85} stroke="#0891B2" strokeWidth={1.2} />
+            <circle cx={500} cy={400} r={11} fill="#FFFFFF" fillOpacity={0.85} stroke="#0891B2" strokeWidth={1.2} />
+          </g>
+        );
+
+      case 'terrace':
+        return (
+          <g key={f.id} className="pointer-events-none select-none">
+            <rect
+              x={f.x}
+              y={f.y}
+              width={f.w}
+              height={f.h}
+              rx={4}
+              fill="#F8FAFC"
+              fillOpacity={0.6}
+              stroke="#94A3B8"
+              strokeWidth={1.5}
+              strokeDasharray="4 3"
+            />
+            {f.id === 'n-terrace-stairs' && (
+              <>
+                <line x1={f.x + 8} y1={f.y + 5} x2={f.x + f.w - 8} y2={f.y + 5} stroke="#CBD5E1" strokeWidth={1} />
+                <line x1={f.x + 8} y1={f.y + 9} x2={f.x + f.w - 8} y2={f.y + 9} stroke="#CBD5E1" strokeWidth={1} />
+                <line x1={f.x + 8} y1={f.y + 13} x2={f.x + f.w - 8} y2={f.y + 13} stroke="#CBD5E1" strokeWidth={1} />
+              </>
+            )}
+          </g>
+        );
+
+      case 'buffet':
+        return (
+          <g key={f.id} className="pointer-events-none select-none">
+            <rect
+              x={f.x}
+              y={f.y}
+              width={f.w}
+              height={f.h}
+              rx={3}
+              fill="#CFFAFE"
+              fillOpacity={0.9}
+              stroke="#0891B2"
+              strokeWidth={1.5}
+            />
+            {/* Small station notches */}
+            {f.w > 50 && (
+              <>
+                <rect x={f.x + 6} y={f.y + 4} width={10} height={f.h - 8} rx={1.5} fill="#A5F3FC" stroke="#06B6D4" strokeWidth={0.75} />
+                <rect x={f.x + f.w - 16} y={f.y + 4} width={10} height={f.h - 8} rx={1.5} fill="#A5F3FC" stroke="#06B6D4" strokeWidth={0.75} />
+              </>
+            )}
+          </g>
+        );
+
+      case 'island':
+        if (isRound) {
+          // If w === h or round table/unit
+          if (f.w === f.h || f.w <= 36) {
+            return (
+              <g key={f.id} className="pointer-events-none select-none">
+                <circle
+                  cx={f.x}
+                  cy={f.y}
+                  r={f.w / 2}
+                  fill={f.id.includes('buffet') || f.id.includes('round-unit') ? '#CFFAFE' : '#E2E8F0'}
+                  stroke={f.id.includes('buffet') || f.id.includes('round-unit') ? '#0891B2' : '#94A3B8'}
+                  strokeWidth={1.2}
+                />
+              </g>
+            );
+          }
+          // Wide island (oval / rounded pill)
+          return (
+            <g key={f.id} className="pointer-events-none select-none">
+              <rect
+                x={f.x}
+                y={f.y}
+                width={f.w}
+                height={f.h}
+                rx={f.h / 2}
+                fill="#CFFAFE"
+                fillOpacity={0.9}
+                stroke="#0891B2"
+                strokeWidth={1.5}
+              />
+              <circle cx={f.x + f.w * 0.25} cy={f.y + f.h / 2} r={f.h * 0.3} fill="#A5F3FC" stroke="#06B6D4" strokeWidth={0.75} />
+              <circle cx={f.x + f.w * 0.75} cy={f.y + f.h / 2} r={f.h * 0.3} fill="#A5F3FC" stroke="#06B6D4" strokeWidth={0.75} />
+            </g>
+          );
+        }
+        return (
+          <rect
+            key={f.id}
+            x={f.x}
+            y={f.y}
+            width={f.w}
+            height={f.h}
+            rx={3}
+            fill="#CFFAFE"
+            stroke="#0891B2"
+            strokeWidth={1.5}
+            className="pointer-events-none select-none"
+          />
+        );
+
+      case 'bar-counter':
+        return (
+          <rect
+            key={f.id}
+            x={f.x}
+            y={f.y}
+            width={f.w}
+            height={f.h}
+            rx={2.5}
+            fill="#BAE6FD"
+            stroke="#0284C7"
+            strokeWidth={1.5}
+            className="pointer-events-none select-none"
+          />
+        );
+
+      case 'banquette':
+        return (
+          <rect
+            key={f.id}
+            x={f.x}
+            y={f.y}
+            width={f.w}
+            height={f.h}
+            rx={2}
+            fill="#E2E8F0"
+            stroke="#94A3B8"
+            strokeWidth={1.2}
+            className="pointer-events-none select-none"
+          />
+        );
+
+      case 'back-of-house':
+      default:
+        return (
+          <rect
+            key={f.id}
+            x={f.x}
+            y={f.y}
+            width={f.w}
+            height={f.h}
+            rx={4}
+            fill="#F8FAFC"
+            fillOpacity={0.75}
+            stroke="#64748B"
+            strokeWidth={1.5}
+            className="pointer-events-none select-none"
+          />
+        );
+    }
+  };
+
+  const renderTableGlyph = (table: DiningTable) => {
     const isSelected = selectedTable?.id === table.id;
     const isHovered = hoveredTable?.id === table.id;
-    const isSearchMatch = highlightQuery.trim() !== '' && (
-      table.tableNumber.toLowerCase().includes(highlightQuery.toLowerCase()) ||
-      (table.occupiedByRoom && table.occupiedByRoom.toLowerCase().includes(highlightQuery.toLowerCase())) ||
-      (table.occupiedByGuest && table.occupiedByGuest.toLowerCase().includes(highlightQuery.toLowerCase()))
-    );
+    const isSearchMatch =
+      highlightQuery.trim() !== '' &&
+      (table.tableNumber.toLowerCase().includes(highlightQuery.toLowerCase()) ||
+        (table.occupiedByRoom &&
+          table.occupiedByRoom.toLowerCase().includes(highlightQuery.toLowerCase())) ||
+        (table.occupiedByGuest &&
+          table.occupiedByGuest.toLowerCase().includes(highlightQuery.toLowerCase())));
 
-    const colors = getStatusColor(table.status);
-    const shape = table.shape || (table.capacity >= 6 ? 'rectangle' : table.capacity === 1 ? 'bar_seat' : 'square');
+    const styles = getStatusStyles(table.status);
+    const tx = table.x ?? 100;
+    const ty = table.y ?? 100;
+    const radius = 11;
+    const isDiamond = table.shape === 'diamond';
+    const isRound = table.shape === 'round';
 
     return (
-      <div
+      <g
         key={table.id}
-        id={`table-node-${table.id}`}
-        style={{
-          left: `${table.x ?? 50}%`,
-          top: `${table.y ?? 50}%`,
-          transform: 'translate(-50%, -50%)',
-        }}
+        id={`table-glyph-${table.id}`}
         onClick={(e) => {
           e.stopPropagation();
           onSelectTable(table);
         }}
         onMouseEnter={() => setHoveredTable(table)}
         onMouseLeave={() => setHoveredTable(null)}
-        className={`absolute cursor-pointer transition-all duration-200 select-none z-20 group ${
-          isSelected ? 'scale-110 z-30' : isHovered ? 'scale-105 z-25' : ''
-        }`}
+        className="cursor-pointer transition-transform duration-150"
+        style={{ cursor: 'pointer' }}
       >
-        {/* Highlight Ring for Search Match */}
+        {/* Search match highlight ping */}
         {isSearchMatch && (
-          <div className="absolute -inset-2 rounded-2xl bg-amber-400/40 animate-ping pointer-events-none" />
+          <circle
+            cx={tx}
+            cy={ty}
+            r={radius + 6}
+            fill="#FDE047"
+            fillOpacity={0.4}
+            stroke="#EAB308"
+            strokeWidth={2}
+            className="animate-pulse"
+          />
         )}
 
-        {/* Outer Highlight for Selected Table */}
+        {/* Selected table halo */}
         {isSelected && (
-          <div className="absolute -inset-2.5 rounded-2xl border-2 border-black bg-black/5 animate-pulse pointer-events-none" />
+          <circle
+            cx={tx}
+            cy={ty}
+            r={radius + 5}
+            fill="none"
+            stroke="#0F172A"
+            strokeWidth={2}
+            strokeDasharray="3 2"
+          />
         )}
 
-        {/* 1. Diamond Table (Gourmet Bar 4-tops) */}
-        {shape === 'diamond' && (
-          <div className="relative flex items-center justify-center p-1">
-            {/* 4 Chairs rotated around diamond faces */}
-            <div className={`absolute -top-1.5 w-2.5 h-2.5 rounded-full ${colors.chair} border shadow-2xs`} />
-            <div className={`absolute -bottom-1.5 w-2.5 h-2.5 rounded-full ${colors.chair} border shadow-2xs`} />
-            <div className={`absolute -left-1.5 w-2.5 h-2.5 rounded-full ${colors.chair} border shadow-2xs`} />
-            <div className={`absolute -right-1.5 w-2.5 h-2.5 rounded-full ${colors.chair} border shadow-2xs`} />
-
-            <div className={`w-9 h-9 rotate-45 rounded-lg border flex flex-col items-center justify-center transition-all ${colors.bg} ${colors.border}`}>
-              <div className="-rotate-45 text-center px-0.5">
-                <span className="font-mono-custom font-black text-[10px] leading-none tracking-tight block">
-                  {table.tableNumber}
-                </span>
-                <span className="text-[7.5px] font-mono-custom opacity-85 block mt-0.5">
-                  {table.status === 'occupied' ? `R${table.occupiedByRoom}` : `${table.capacity}P`}
-                </span>
-              </div>
-            </div>
-          </div>
+        {/* Hover table halo */}
+        {isHovered && !isSelected && (
+          <circle
+            cx={tx}
+            cy={ty}
+            r={radius + 3}
+            fill="none"
+            stroke="#3B82F6"
+            strokeWidth={1.5}
+          />
         )}
 
-        {/* 2. Round Table (VIP or High Tops) */}
-        {shape === 'round' && (
-          <div className="relative flex items-center justify-center p-1">
-            {/* 4 Radial Chairs */}
-            <div className={`absolute -top-1.5 w-2.5 h-2.5 rounded-full ${colors.chair} border shadow-2xs`} />
-            <div className={`absolute -bottom-1.5 w-2.5 h-2.5 rounded-full ${colors.chair} border shadow-2xs`} />
-            <div className={`absolute -left-1.5 w-2.5 h-2.5 rounded-full ${colors.chair} border shadow-2xs`} />
-            <div className={`absolute -right-1.5 w-2.5 h-2.5 rounded-full ${colors.chair} border shadow-2xs`} />
-
-            <div className={`w-10 h-10 rounded-full border flex flex-col items-center justify-center transition-all ${colors.bg} ${colors.border}`}>
-              <span className="font-mono-custom font-black text-[10px] leading-tight">
-                {table.tableNumber}
-              </span>
-              <span className="text-[7.5px] font-mono-custom opacity-85">
-                {table.status === 'occupied' ? `R${table.occupiedByRoom}` : `${table.capacity}P`}
-              </span>
-            </div>
-          </div>
+        {/* Table Body */}
+        {isDiamond ? (
+          <g transform={`rotate(45, ${tx}, ${ty})`}>
+            <rect
+              x={tx - radius}
+              y={ty - radius}
+              width={radius * 2}
+              height={radius * 2}
+              rx={3}
+              fill={styles.fill}
+              stroke={styles.stroke}
+              strokeWidth={1.5}
+            />
+          </g>
+        ) : isRound ? (
+          <circle
+            cx={tx}
+            cy={ty}
+            r={radius}
+            fill={styles.fill}
+            stroke={styles.stroke}
+            strokeWidth={1.5}
+          />
+        ) : (
+          <rect
+            x={tx - radius}
+            y={ty - radius}
+            width={radius * 2}
+            height={radius * 2}
+            rx={3}
+            fill={styles.fill}
+            stroke={styles.stroke}
+            strokeWidth={1.5}
+          />
         )}
 
-        {/* 3. Semi-Circular Lounge / Curved Booth */}
-        {shape === 'semi_circle' && (
-          <div className="relative flex flex-col items-center justify-center p-1">
-            {/* Curved Backrest Strip */}
-            <div className="w-14 h-4 rounded-t-full border-t-2 border-x-2 border-stone-400 bg-stone-200 -mb-1.5" />
-            <div className={`w-12 h-9 rounded-t-full rounded-b-md border flex flex-col items-center justify-center transition-all ${colors.bg} ${colors.border}`}>
-              <span className="font-mono-custom font-black text-[9.5px] leading-tight mt-0.5">
-                {table.tableNumber}
-              </span>
-              <span className="text-[7.5px] font-mono-custom opacity-85">
-                {table.status === 'occupied' ? `R${table.occupiedByRoom}` : `${table.capacity}P`}
-              </span>
-            </div>
-          </div>
+        {/* Table Label (centered at table number font size ~11) */}
+        <text
+          x={tx}
+          y={table.status === 'occupied' && table.occupiedByRoom ? ty - 2 : ty}
+          textAnchor="middle"
+          dominantBaseline="central"
+          fill={styles.textFill}
+          fontSize={10.5}
+          fontWeight="900"
+          className="font-mono-custom select-none pointer-events-none"
+        >
+          {table.tableNumber}
+        </text>
+
+        {/* Sub-label: Room number if occupied, or capacity */}
+        {table.status === 'occupied' && table.occupiedByRoom ? (
+          <text
+            x={tx}
+            y={ty + 6}
+            textAnchor="middle"
+            dominantBaseline="central"
+            fill={styles.subTextFill}
+            fontSize={6.5}
+            fontWeight="800"
+            className="font-mono-custom select-none pointer-events-none"
+          >
+            R{table.occupiedByRoom}
+          </text>
+        ) : (
+          <text
+            x={tx}
+            y={ty + 6.5}
+            textAnchor="middle"
+            dominantBaseline="central"
+            fill={styles.subTextFill}
+            fontSize={6}
+            fontWeight="700"
+            className="font-mono-custom select-none pointer-events-none opacity-80"
+          >
+            {table.capacity}P
+          </text>
         )}
-
-        {/* 4. Booth / Window Banquette */}
-        {shape === 'booth' && (
-          <div className="relative flex flex-col items-center justify-center p-1">
-            {/* Top & Bottom Booth Backrests */}
-            <div className="w-11 h-1.5 rounded-t-sm bg-cyan-700/80 border border-cyan-800 mb-0.5" />
-            <div className={`w-11 h-8 rounded-sm border flex flex-col items-center justify-center transition-all ${colors.bg} ${colors.border}`}>
-              <span className="font-mono-custom font-black text-[9.5px] leading-none">
-                {table.tableNumber}
-              </span>
-              <span className="text-[7.5px] font-mono-custom opacity-85 mt-0.5">
-                {table.status === 'occupied' ? `R${table.occupiedByRoom}` : `${table.capacity}P`}
-              </span>
-            </div>
-            <div className="w-11 h-1.5 rounded-b-sm bg-cyan-700/80 border border-cyan-800 mt-0.5" />
-          </div>
-        )}
-
-        {/* 5. Bar Seat / Stool */}
-        {shape === 'bar_seat' && (
-          <div className="relative flex items-center justify-center p-0.5">
-            <div className="w-8 h-8 rounded-full border flex flex-col items-center justify-center transition-all shadow-2xs bg-white border-amber-600/60 text-amber-950 hover:bg-amber-50">
-              <span className="font-mono-custom font-bold text-[8.5px] leading-none">
-                {table.tableNumber}
-              </span>
-              <span className="text-[7px] font-mono-custom text-muted-foreground mt-0.5">
-                {table.status === 'occupied' ? `R${table.occupiedByRoom}` : `${table.capacity}P`}
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* 6. Standard Square / 4-Top or 2-Top Dining Table */}
-        {shape === 'square' && (
-          <div className="relative flex items-center justify-center p-1">
-            {/* Chairs: 4 chairs for 4-tops, 2 chairs for 2-tops */}
-            <div className={`absolute -top-1.5 w-3.5 h-1.5 rounded-t-sm ${colors.chair} border shadow-2xs`} />
-            <div className={`absolute -bottom-1.5 w-3.5 h-1.5 rounded-b-sm ${colors.chair} border shadow-2xs`} />
-            {table.capacity > 2 && (
-              <>
-                <div className={`absolute -left-1.5 w-1.5 h-3.5 rounded-l-sm ${colors.chair} border shadow-2xs`} />
-                <div className={`absolute -right-1.5 w-1.5 h-3.5 rounded-r-sm ${colors.chair} border shadow-2xs`} />
-              </>
-            )}
-
-            <div className={`w-9.5 h-9.5 rounded-md border flex flex-col items-center justify-center transition-all ${colors.bg} ${colors.border}`}>
-              <span className="font-mono-custom font-black text-[10px] leading-none">
-                {table.tableNumber}
-              </span>
-              <span className="text-[7.5px] font-mono-custom opacity-85 mt-0.5">
-                {table.status === 'occupied' ? `R${table.occupiedByRoom}` : `${table.capacity}P`}
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* 7. Long Rectangle Table */}
-        {shape === 'rectangle' && (
-          <div className="relative flex items-center justify-center p-1">
-            {/* Top & Bottom Chairs */}
-            <div className="absolute -top-1 flex gap-1">
-              <div className={`w-2.5 h-1.5 rounded-t-sm ${colors.chair} border shadow-2xs`} />
-              <div className={`w-2.5 h-1.5 rounded-t-sm ${colors.chair} border shadow-2xs`} />
-            </div>
-            <div className="absolute -bottom-1 flex gap-1">
-              <div className={`w-2.5 h-1.5 rounded-b-sm ${colors.chair} border shadow-2xs`} />
-              <div className={`w-2.5 h-1.5 rounded-b-sm ${colors.chair} border shadow-2xs`} />
-            </div>
-
-            <div className={`w-13 h-8.5 rounded-md border flex flex-col items-center justify-center transition-all ${colors.bg} ${colors.border}`}>
-              <span className="font-mono-custom font-black text-[10px] leading-none">
-                {table.tableNumber}
-              </span>
-              <span className="text-[7.5px] font-mono-custom opacity-85 mt-0.5">
-                {table.status === 'occupied' ? `R${table.occupiedByRoom}` : `${table.capacity}P`}
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* Smoking Indicator Badge */}
-        {table.isSmoking && (
-          <span className="absolute -top-2 -right-2 bg-cyan-600 text-white rounded-full p-0.5 shadow-xs border border-white" title="Smoking Area Table">
-            <Cigarette size={9} />
-          </span>
-        )}
-      </div>
+      </g>
     );
   };
 
@@ -296,15 +535,17 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
                   {isIbis ? "Charlie's Corner & Delhi Street" : 'Food Exchange & Gourmet Bar'}
                 </span>
                 <span className="text-xs text-white/40">•</span>
-                <span className="text-xs font-mono-custom text-white/80">Architectural Floor Plan</span>
+                <span className="text-xs font-mono-custom text-white/80">
+                  {isIbis ? 'Proportion 2.24:1' : 'Proportion 2.64:1'}
+                </span>
               </div>
               <p className="text-[11px] text-white/60 font-sans mt-0.5">
-                Live seating allocation, host stand view, and zone occupancy.
+                Live architectural floor plan with uniform viewBox scaling.
               </p>
             </div>
           </div>
 
-          {/* Map Controls */}
+          {/* Zoom Controls */}
           <div className="flex items-center gap-2">
             <div className="flex items-center bg-white/10 rounded-xl p-1 border border-white/10 text-xs font-mono-custom">
               <button
@@ -336,165 +577,39 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
         </div>
 
         {/* Blueprint Map Surface */}
-        <div className="relative w-full overflow-auto p-4 md:p-8 flex justify-center items-center min-h-[520px] bg-[#F7F5F0]">
-          <div 
-            style={{ 
+        <div className="relative w-full overflow-auto p-4 md:p-8 flex justify-center items-center bg-[#F7F5F0]">
+          <div
+            style={{
               transform: `scale(${zoomLevel})`,
               transformOrigin: 'center center',
-              transition: 'transform 0.2s ease-out'
+              transition: 'transform 0.2s ease-out',
             }}
-            className="relative w-[1100px] h-[460px] bg-white rounded-2xl border-2 border-stone-400/80 shadow-xl overflow-hidden shrink-0 select-none"
+            className="w-full flex justify-center"
           >
-            {/* Grid Pattern Background */}
-            <div className="absolute inset-0 bg-[radial-gradient(#0A162B_0.75px,transparent_0.75px)] [background-size:20px_20px] opacity-10 pointer-events-none" />
+            <svg
+              viewBox={`0 0 ${plate.w} ${plate.h}`}
+              preserveAspectRatio="xMidYMid meet"
+              className="w-full h-auto max-w-[1100px] bg-white rounded-2xl border-2 border-stone-400/80 shadow-xl select-none"
+              role="img"
+              aria-label={`${isIbis ? "Charlie's Corner" : 'Food Exchange and Gourmet Bar'} floor plan`}
+            >
+              <defs>
+                {/* Subtle grid pattern for architectural canvas */}
+                <pattern id="blueprint-grid" width="20" height="20" patternUnits="userSpaceOnUse">
+                  <circle cx="10" cy="10" r="0.75" fill="#0A162B" fillOpacity="0.1" />
+                </pattern>
+              </defs>
 
-            {/* ------------------------------------------------------------- */}
-            {/* HOTEL 1: NOVOTEL FOOD EXCHANGE & GOURMET BAR ARCHITECTURE   */}
-            {/* ------------------------------------------------------------- */}
-            {!isIbis && (
-              <>
-                {/* 1. Left Back-of-House Wing & Top-Left Stairs / Terrace */}
-                <div className="absolute top-[15%] left-[4%] w-[10%] h-[38%] rounded-xl border-2 border-stone-700 bg-stone-100/70 pointer-events-none z-10 shadow-xs" />
-                
-                <div className="absolute top-[4%] left-[4%] w-[12%] h-[10%] rounded-lg border border-dashed border-stone-400 bg-stone-50/60 p-1 pointer-events-none z-10 flex items-center justify-center">
-                  <div className="flex flex-col gap-0.5 w-full">
-                    <div className="h-0.5 bg-stone-300 rounded-full" />
-                    <div className="h-0.5 bg-stone-300 rounded-full" />
-                    <div className="h-0.5 bg-stone-300 rounded-full" />
-                  </div>
-                </div>
+              {/* Building Envelope Canvas Background */}
+              <rect x="0" y="0" width={plate.w} height={plate.h} rx="16" fill="#FFFFFF" />
+              <rect x="0" y="0" width={plate.w} height={plate.h} rx="16" fill="url(#blueprint-grid)" />
 
-                {/* 2. Named Non-Table Feature: HOSTESS DESK (x:4, y:58, w:10, h:6) */}
-                <div className="absolute top-[58%] left-[4%] w-[10%] h-[6%] rounded-md bg-stone-100 border-2 border-stone-800 flex items-center justify-center pointer-events-none z-15 shadow-xs">
-                  <span className="text-[7px] font-mono-custom font-black tracking-wider text-stone-900 uppercase">
-                    HOSTESS DESK
-                  </span>
-                </div>
+              {/* 1. Render all non-table architectural features behind tables */}
+              {features.map((f) => renderFeatureShape(f))}
 
-                {/* 3. Named Non-Table Feature: COFFEE STAND (x:19, y:62, w:3, h:17, verticalLabel: true) */}
-                <div className="absolute top-[62%] left-[19%] w-[3%] h-[17%] rounded-sm border-2 border-amber-700 bg-amber-100/90 flex flex-col items-center justify-center pointer-events-none z-15 shadow-xs py-0.5">
-                  <span className="text-[6.5px] font-mono-custom font-black text-amber-950 uppercase tracking-widest [writing-mode:vertical-lr] rotate-180 text-center">
-                    COFFEE STAND
-                  </span>
-                </div>
-
-                {/* Bench seating on left wall (x:19, y:82, w:3, h:14) */}
-                <div className="absolute top-[82%] left-[19%] w-[3%] h-[14%] rounded-sm bg-stone-200/90 border border-stone-400 pointer-events-none z-10" />
-
-                {/* 4. Gourmet Bar Enclosed Room (x:49, y:4, w:36, h:26) */}
-                <div className="absolute top-[4%] left-[49%] w-[36%] h-[26%] rounded-xl border-2 border-stone-800 bg-stone-50/50 pointer-events-none z-10">
-                  {/* Bar Counter down right side (x:79, y:6, w:4, h:22 relative to room) */}
-                  <div className="absolute top-[8%] right-[3%] w-[11%] h-[84%] rounded bg-cyan-200/90 border border-cyan-600" />
-                  {/* Unlabelled round table beside BAR6 (drawn, left blank) */}
-                  <div className="absolute top-[50%] right-[3%] w-[11%] h-[24%] rounded-full bg-stone-200 border border-stone-400" />
-                </div>
-
-                {/* 5. Main Dining Service Counter in C3-C4 gap (x:40, y:40, w:4, h:5) */}
-                <div className="absolute top-[40%] left-[40%] w-[4%] h-[5%] rounded-sm bg-stone-200/90 border border-stone-500 pointer-events-none z-10" />
-
-                {/* 6. Top Buffet Counter (x:58, y:34, w:22, h:5) */}
-                <div className="absolute top-[34%] left-[58%] w-[22%] h-[5%] rounded bg-cyan-100/90 border-2 border-cyan-600 flex items-center justify-between px-1 pointer-events-none z-10">
-                  <div className="w-3 h-3 rounded-xs bg-cyan-200 border border-cyan-400" />
-                  <div className="w-3 h-3 rounded-xs bg-cyan-200 border border-cyan-400" />
-                  <div className="w-3 h-3 rounded-xs bg-cyan-200 border border-cyan-400" />
-                </div>
-
-                {/* 7. Central Buffet Island (x:62, y:52, w:16, h:12) */}
-                <div className="absolute top-[52%] left-[62%] w-[16%] h-[12%] rounded-full bg-cyan-100/90 border-2 border-cyan-600 flex items-center justify-around px-1 pointer-events-none z-10 shadow-xs">
-                  <div className="w-4.5 h-4.5 rounded-full bg-cyan-300 border border-cyan-500" />
-                  <div className="w-4.5 h-4.5 rounded-full bg-cyan-300 border border-cyan-500" />
-                </div>
-
-                {/* 8. Bottom Buffet Counter (x:58, y:72, w:22, h:5) */}
-                <div className="absolute top-[72%] left-[58%] w-[22%] h-[5%] rounded bg-cyan-100/90 border-2 border-cyan-600 flex items-center justify-between px-1 pointer-events-none z-10">
-                  <div className="w-3 h-3 rounded-xs bg-cyan-200 border border-cyan-400" />
-                  <div className="w-3 h-3 rounded-xs bg-cyan-200 border border-cyan-400" />
-                  <div className="w-3 h-3 rounded-xs bg-cyan-200 border border-cyan-400" />
-                </div>
-
-                {/* 9. Banquette down the right-hand wall (x:92, y:18, w:3, h:66) */}
-                <div className="absolute top-[18%] left-[92%] w-[3%] h-[66%] rounded-lg bg-cyan-200/80 border-2 border-cyan-600 pointer-events-none z-10" />
-
-                {/* 10. Bench seating along bottom right (x:84, y:88, w:10, h:3) */}
-                <div className="absolute top-[88%] left-[84%] w-[10%] h-[3%] rounded-sm bg-stone-200/90 border border-stone-400 pointer-events-none z-10" />
-              </>
-            )}
-
-            {/* ------------------------------------------------------------- */}
-            {/* HOTEL 2: IBIS CHARLIE'S CORNER ARCHITECTURE                  */}
-            {/* ------------------------------------------------------------- */}
-            {isIbis && (
-              <>
-                {/* 1. Bar Prep / Kitchen Pass (Left Wing Top, x:18, y:6, w:14, h:22) */}
-                <div className="absolute top-[6%] left-[18%] w-[14%] h-[22%] rounded-xl border-2 border-stone-800 bg-stone-100/70 p-1 pointer-events-none z-10 flex flex-col justify-between">
-                  <div className="w-full h-3.5 rounded bg-cyan-200/90 border border-cyan-500" />
-                </div>
-
-                {/* Bottom-left Back-of-House / Entrance Foyer (x:4, y:32, w:26, h:48) */}
-                <div className="absolute top-[32%] left-[4%] w-[26%] h-[48%] rounded-xl border border-dashed border-stone-400 bg-stone-50/40 pointer-events-none z-0" />
-
-                {/* 2. Named Non-Table Feature: HOSTESS DESK (x:34, y:26, w:10, h:5) */}
-                <div className="absolute top-[26%] left-[34%] w-[10%] h-[5%] rounded-md bg-stone-100 border-2 border-stone-800 flex items-center justify-center pointer-events-none z-15 shadow-xs">
-                  <span className="text-[6.5px] font-mono-custom font-black text-stone-900 uppercase tracking-wider">
-                    HOSTESS DESK
-                  </span>
-                </div>
-
-                {/* 3. Named Non-Table Feature: FRONT DESK (x:72, y:36, w:9, h:5) */}
-                <div className="absolute top-[36%] left-[72%] w-[9%] h-[5%] rounded-md bg-stone-100 border-2 border-stone-800 flex items-center justify-center pointer-events-none z-15 shadow-xs">
-                  <span className="text-[6.5px] font-mono-custom font-black text-stone-900 uppercase tracking-wider">
-                    FRONT DESK
-                  </span>
-                </div>
-
-                {/* 4. Top Buffet Counter (x:46, y:24, w:22, h:6) */}
-                <div className="absolute top-[24%] left-[46%] w-[22%] h-[6%] rounded bg-cyan-100/90 border-2 border-cyan-600 flex items-center justify-between px-1 pointer-events-none z-10">
-                  <div className="w-3 h-3 rounded-xs bg-cyan-200 border border-cyan-400" />
-                  <div className="w-3 h-3 rounded-xs bg-cyan-200 border border-cyan-400" />
-                </div>
-
-                {/* 5. Center Dining Dividers left & right of C/B block */}
-                <div className="absolute top-[40%] left-[44%] w-[1.2%] h-[26%] rounded bg-cyan-200/90 border border-cyan-600 pointer-events-none z-10" />
-                <div className="absolute top-[40%] left-[68%] w-[1.2%] h-[26%] rounded bg-cyan-200/90 border border-cyan-600 pointer-events-none z-10" />
-
-                {/* 6. Buffet Island / Unit left of C/B (x:38, y:48, w:6, h:12) */}
-                <div className="absolute top-[48%] left-[38%] w-[6%] h-[12%] rounded-full bg-cyan-100/90 border-2 border-cyan-600 flex items-center justify-center pointer-events-none z-10">
-                  <div className="w-3.5 h-3.5 rounded-full bg-cyan-300 border border-cyan-500" />
-                </div>
-
-                {/* 7. Outdoor Smoking Terrace along bottom (x:32, y:78, w:26, h:18) with smoking symbol and 4 blank unlabelled tables */}
-                <div className="absolute top-[78%] left-[32%] w-[26%] h-[18%] rounded-xl bg-cyan-100/90 border-2 border-cyan-600 p-1 pointer-events-none z-10 shadow-md flex flex-col justify-between">
-                  <div className="flex items-center justify-between border-b border-cyan-300/80 pb-0.5">
-                    <div className="flex items-center gap-1 text-cyan-900 px-1 py-0.2 rounded text-[7px] font-mono-custom font-extrabold uppercase">
-                      <Cigarette size={10} />
-                      <span>Smoking Area</span>
-                    </div>
-                  </div>
-                  {/* 4 blank unlabelled tables (unselectable, non-seatable) */}
-                  <div className="grid grid-cols-2 gap-1 px-2 py-0.5">
-                    <div className="w-6 h-5 rounded-xs border border-cyan-500 bg-white/70 mx-auto" />
-                    <div className="w-6 h-5 rounded-xs border border-cyan-500 bg-white/70 mx-auto" />
-                    <div className="w-6 h-5 rounded-xs border border-cyan-500 bg-white/70 mx-auto" />
-                    <div className="w-6 h-5 rounded-xs border border-cyan-500 bg-white/70 mx-auto" />
-                  </div>
-                </div>
-
-                {/* 8. Banquettes down right wall (x:88, y:18, w:2.5, h:58) */}
-                <div className="absolute top-[18%] left-[88%] w-[2.5%] h-[58%] rounded-lg bg-cyan-200/80 border-2 border-cyan-600 pointer-events-none z-10" />
-
-                {/* 9. Outside Terrace with two small tables (x:93, y:34, w:5, h:32) */}
-                <div className="absolute top-[34%] left-[93%] w-[5%] h-[32%] rounded-xl bg-stone-50/70 border-2 border-dashed border-stone-400 p-1 pointer-events-none z-10 flex flex-col items-center justify-around">
-                  <div className="w-4 h-4 rounded-full border border-stone-400 bg-stone-200" />
-                  <div className="w-4 h-4 rounded-full border border-stone-400 bg-stone-200" />
-                </div>
-
-                {/* 10. Bench seating along bottom (x:62, y:92, w:26, h:3) */}
-                <div className="absolute top-[92%] left-[62%] w-[26%] h-[3%] rounded-sm bg-stone-200/90 border border-stone-400 pointer-events-none z-10" />
-              </>
-            )}
-
-            {/* Render all tables positioned on the floor map */}
-            {visibleTables.map((table) => renderTableShape(table))}
+              {/* 2. Render all selectable interactive dining tables */}
+              {visibleTables.map((t) => renderTableGlyph(t))}
+            </svg>
           </div>
         </div>
 
@@ -508,7 +623,7 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
               <span className="text-foreground">Available</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="w-3.5 h-3.5 rounded-md bg-accent border border-accent" />
+              <span className={`w-3.5 h-3.5 rounded-md ${isIbis ? 'bg-red-600' : 'bg-blue-600'} border ${isIbis ? 'border-red-700' : 'border-blue-700'}`} />
               <span className="text-foreground font-semibold">Occupied</span>
             </div>
             <div className="flex items-center gap-1.5">
@@ -534,13 +649,16 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
             </span>
             <span className="text-muted-foreground">•</span>
             <span className="text-muted-foreground">
-              Total Seats: <strong className="text-foreground">{visibleTables.reduce((a, t) => a + t.capacity, 0)}</strong>
+              Total Seats:{' '}
+              <strong className="text-foreground">
+                {visibleTables.reduce((a, t) => a + t.capacity, 0)}
+              </strong>
             </span>
           </div>
         </div>
       </div>
 
-      {/* Selected Table Quick Info Card (if table selected from 2D floor plan) */}
+      {/* Selected Table Quick Info Card */}
       <AnimatePresence>
         {selectedTable && (
           <motion.div
@@ -550,13 +668,15 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
             className="bg-white rounded-2xl p-5 border-2 border-accent/40 shadow-luxury flex flex-col md:flex-row md:items-center justify-between gap-4"
           >
             <div className="flex items-start gap-4">
-              <div className={`w-14 h-14 rounded-2xl flex flex-col items-center justify-center border font-mono-custom font-extrabold text-lg shadow-sm ${
-                selectedTable.status === 'occupied'
-                  ? 'bg-accent text-white border-accent'
-                  : selectedTable.status === 'available'
-                  ? 'bg-emerald-50 text-emerald-800 border-emerald-400'
-                  : 'bg-amber-50 text-amber-900 border-amber-400'
-              }`}>
+              <div
+                className={`w-14 h-14 rounded-2xl flex flex-col items-center justify-center border font-mono-custom font-extrabold text-lg shadow-sm ${
+                  selectedTable.status === 'occupied'
+                    ? `${isIbis ? 'bg-red-600 border-red-700' : 'bg-blue-600 border-blue-700'} text-white`
+                    : selectedTable.status === 'available'
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-400'
+                    : 'bg-amber-50 text-amber-900 border-amber-400'
+                }`}
+              >
                 <span>{selectedTable.tableNumber}</span>
                 <span className="text-[9px] font-medium opacity-80">{selectedTable.capacity} Seats</span>
               </div>
@@ -566,13 +686,15 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
                   <h4 className="text-lg font-bold font-display text-foreground">
                     Table {selectedTable.tableNumber} • {selectedTable.zone}
                   </h4>
-                  <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-mono-custom font-bold uppercase ${
-                    selectedTable.status === 'occupied'
-                      ? 'bg-accent/15 text-accent'
-                      : selectedTable.status === 'available'
-                      ? 'bg-emerald-100 text-emerald-800'
-                      : 'bg-amber-100 text-amber-900'
-                  }`}>
+                  <span
+                    className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-mono-custom font-bold uppercase ${
+                      selectedTable.status === 'occupied'
+                        ? `${isIbis ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'}`
+                        : selectedTable.status === 'available'
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : 'bg-amber-100 text-amber-900'
+                    }`}
+                  >
                     {selectedTable.status}
                   </span>
                   {selectedTable.isSmoking && (
@@ -584,13 +706,21 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
 
                 {selectedTable.status === 'occupied' && selectedTable.occupiedByRoom ? (
                   <div className="flex items-center gap-3 text-xs font-mono-custom text-muted-foreground mt-1">
-                    <span>Room: <strong className="text-foreground">{selectedTable.occupiedByRoom}</strong></span>
+                    <span>
+                      Room: <strong className="text-foreground">{selectedTable.occupiedByRoom}</strong>
+                    </span>
                     <span>•</span>
-                    <span>Guest: <strong className="text-foreground">{selectedTable.occupiedByGuest || 'In-House'}</strong></span>
+                    <span>
+                      Guest: <strong className="text-foreground">{selectedTable.occupiedByGuest || 'In-House'}</strong>
+                    </span>
                     <span>•</span>
-                    <span>Seated at: <strong className="text-foreground">{selectedTable.occupiedSince || 'Active'}</strong></span>
+                    <span>
+                      Seated at: <strong className="text-foreground">{selectedTable.occupiedSince || 'Active'}</strong>
+                    </span>
                     <span>•</span>
-                    <span>Pax: <strong className="text-foreground">{selectedTable.occupiedPax || selectedTable.capacity}</strong></span>
+                    <span>
+                      Pax: <strong className="text-foreground">{selectedTable.occupiedPax || selectedTable.capacity}</strong>
+                    </span>
                   </div>
                 ) : (
                   <p className="text-xs text-muted-foreground font-mono-custom mt-1">

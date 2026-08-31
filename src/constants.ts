@@ -118,98 +118,118 @@ const PROVISIONAL_CAPACITIES = {
   ibisRowA: 2,
 };
 
+export interface FloorPlate {
+  w: number;
+  h: number;
+}
+
+export const NOVOTEL_PLATE: FloorPlate = { w: 870, h: 330 }; // 2.64 : 1
+export const IBIS_PLATE: FloorPlate = { w: 940, h: 420 }; // 2.24 : 1
+
 export const DEFAULT_NOVOTEL_TABLES: DiningTable[] = [
-  // 1. Zone Main Dining - Row C (Upper, 5 tables, y: 42)
-  // Gap between C3 and C4 where unlabelled service counter sits
-  { id: 'n-c1', tableNumber: 'C1', capacity: PROVISIONAL_CAPACITIES.novotelMainDining, zone: 'Main Dining', status: 'available', x: 24, y: 42, shape: 'square' },
-  { id: 'n-c2', tableNumber: 'C2', capacity: PROVISIONAL_CAPACITIES.novotelMainDining, zone: 'Main Dining', status: 'available', x: 30, y: 42, shape: 'square' },
-  { id: 'n-c3', tableNumber: 'C3', capacity: PROVISIONAL_CAPACITIES.novotelMainDining, zone: 'Main Dining', status: 'available', x: 35, y: 42, shape: 'square' },
-  { id: 'n-c4', tableNumber: 'C4', capacity: PROVISIONAL_CAPACITIES.novotelMainDining, zone: 'Main Dining', status: 'available', x: 47, y: 42, shape: 'square' },
-  { id: 'n-c5', tableNumber: 'C5', capacity: PROVISIONAL_CAPACITIES.novotelMainDining, zone: 'Main Dining', status: 'available', x: 52, y: 42, shape: 'square' },
+  // 1. Zone Main Dining - Row C (y: 140, 5 tables, gap between C3 and C4)
+  { id: 'n-c1', tableNumber: 'C1', capacity: PROVISIONAL_CAPACITIES.novotelMainDining, zone: 'Main Dining', status: 'available', x: 210, y: 140, shape: 'square' },
+  { id: 'n-c2', tableNumber: 'C2', capacity: PROVISIONAL_CAPACITIES.novotelMainDining, zone: 'Main Dining', status: 'available', x: 258, y: 140, shape: 'square' },
+  { id: 'n-c3', tableNumber: 'C3', capacity: PROVISIONAL_CAPACITIES.novotelMainDining, zone: 'Main Dining', status: 'available', x: 306, y: 140, shape: 'square' },
+  { id: 'n-c4', tableNumber: 'C4', capacity: PROVISIONAL_CAPACITIES.novotelMainDining, zone: 'Main Dining', status: 'available', x: 405, y: 140, shape: 'square' },
+  { id: 'n-c5', tableNumber: 'C5', capacity: PROVISIONAL_CAPACITIES.novotelMainDining, zone: 'Main Dining', status: 'available', x: 453, y: 140, shape: 'square' },
 
-  // 2. Zone Main Dining - Row B (Middle, 5 tables, y: 67)
-  { id: 'n-b1', tableNumber: 'B1', capacity: PROVISIONAL_CAPACITIES.novotelMainDining, zone: 'Main Dining', status: 'available', x: 30, y: 67, shape: 'square' },
-  { id: 'n-b2', tableNumber: 'B2', capacity: PROVISIONAL_CAPACITIES.novotelMainDining, zone: 'Main Dining', status: 'available', x: 35, y: 67, shape: 'square' },
-  { id: 'n-b3', tableNumber: 'B3', capacity: PROVISIONAL_CAPACITIES.novotelMainDining, zone: 'Main Dining', status: 'available', x: 40, y: 67, shape: 'square' },
-  { id: 'n-b4', tableNumber: 'B4', capacity: PROVISIONAL_CAPACITIES.novotelMainDining, zone: 'Main Dining', status: 'available', x: 45, y: 67, shape: 'square' },
-  { id: 'n-b5', tableNumber: 'B5', capacity: PROVISIONAL_CAPACITIES.novotelMainDining, zone: 'Main Dining', status: 'available', x: 50, y: 67, shape: 'square' },
+  // 2. Zone Main Dining - Row B (y: 222, 5 tables)
+  { id: 'n-b1', tableNumber: 'B1', capacity: PROVISIONAL_CAPACITIES.novotelMainDining, zone: 'Main Dining', status: 'available', x: 265, y: 222, shape: 'square' },
+  { id: 'n-b2', tableNumber: 'B2', capacity: PROVISIONAL_CAPACITIES.novotelMainDining, zone: 'Main Dining', status: 'available', x: 308, y: 222, shape: 'square' },
+  { id: 'n-b3', tableNumber: 'B3', capacity: PROVISIONAL_CAPACITIES.novotelMainDining, zone: 'Main Dining', status: 'available', x: 350, y: 222, shape: 'square' },
+  { id: 'n-b4', tableNumber: 'B4', capacity: PROVISIONAL_CAPACITIES.novotelMainDining, zone: 'Main Dining', status: 'available', x: 395, y: 222, shape: 'square' },
+  { id: 'n-b5', tableNumber: 'B5', capacity: PROVISIONAL_CAPACITIES.novotelMainDining, zone: 'Main Dining', status: 'available', x: 438, y: 222, shape: 'square' },
 
-  // 3. Zone Main Dining - Row A (Lower, 6 tables, y: 94)
-  { id: 'n-a1', tableNumber: 'A1', capacity: PROVISIONAL_CAPACITIES.novotelMainDining, zone: 'Main Dining', status: 'available', x: 27, y: 94, shape: 'square' },
-  { id: 'n-a2', tableNumber: 'A2', capacity: PROVISIONAL_CAPACITIES.novotelMainDining, zone: 'Main Dining', status: 'available', x: 32, y: 94, shape: 'square' },
-  { id: 'n-a3', tableNumber: 'A3', capacity: PROVISIONAL_CAPACITIES.novotelMainDining, zone: 'Main Dining', status: 'available', x: 37, y: 94, shape: 'square' },
-  { id: 'n-a4', tableNumber: 'A4', capacity: PROVISIONAL_CAPACITIES.novotelMainDining, zone: 'Main Dining', status: 'available', x: 43, y: 94, shape: 'square' },
-  { id: 'n-a5', tableNumber: 'A5', capacity: PROVISIONAL_CAPACITIES.novotelMainDining, zone: 'Main Dining', status: 'available', x: 48, y: 94, shape: 'square' },
-  { id: 'n-a6', tableNumber: 'A6', capacity: PROVISIONAL_CAPACITIES.novotelMainDining, zone: 'Main Dining', status: 'available', x: 54, y: 94, shape: 'square' },
+  // 3. Zone Main Dining - Row A (y: 305, 6 tables)
+  { id: 'n-a1', tableNumber: 'A1', capacity: PROVISIONAL_CAPACITIES.novotelMainDining, zone: 'Main Dining', status: 'available', x: 232, y: 305, shape: 'square' },
+  { id: 'n-a2', tableNumber: 'A2', capacity: PROVISIONAL_CAPACITIES.novotelMainDining, zone: 'Main Dining', status: 'available', x: 278, y: 305, shape: 'square' },
+  { id: 'n-a3', tableNumber: 'A3', capacity: PROVISIONAL_CAPACITIES.novotelMainDining, zone: 'Main Dining', status: 'available', x: 325, y: 305, shape: 'square' },
+  { id: 'n-a4', tableNumber: 'A4', capacity: PROVISIONAL_CAPACITIES.novotelMainDining, zone: 'Main Dining', status: 'available', x: 372, y: 305, shape: 'square' },
+  { id: 'n-a5', tableNumber: 'A5', capacity: PROVISIONAL_CAPACITIES.novotelMainDining, zone: 'Main Dining', status: 'available', x: 420, y: 305, shape: 'square' },
+  { id: 'n-a6', tableNumber: 'A6', capacity: PROVISIONAL_CAPACITIES.novotelMainDining, zone: 'Main Dining', status: 'available', x: 466, y: 305, shape: 'square' },
 
-  // 4. Zone Gourmet Bar - 6 tables in enclosed room top-right (square set on diagonal: diamond)
-  // Numbering snakes: Top row reads BAR4, BAR5, BAR6 left to right; bottom row reads BAR3, BAR2, BAR1 left to right (BAR1 is bottom-right)
-  { id: 'n-bar4', tableNumber: 'BAR4', capacity: PROVISIONAL_CAPACITIES.novotelGourmetBar, zone: 'Gourmet Bar', status: 'available', x: 53, y: 11, shape: 'diamond' },
-  { id: 'n-bar5', tableNumber: 'BAR5', capacity: PROVISIONAL_CAPACITIES.novotelGourmetBar, zone: 'Gourmet Bar', status: 'available', x: 62, y: 11, shape: 'diamond' },
-  { id: 'n-bar6', tableNumber: 'BAR6', capacity: PROVISIONAL_CAPACITIES.novotelGourmetBar, zone: 'Gourmet Bar', status: 'available', x: 71, y: 11, shape: 'diamond' },
-  { id: 'n-bar3', tableNumber: 'BAR3', capacity: PROVISIONAL_CAPACITIES.novotelGourmetBar, zone: 'Gourmet Bar', status: 'available', x: 53, y: 23, shape: 'diamond' },
-  { id: 'n-bar2', tableNumber: 'BAR2', capacity: PROVISIONAL_CAPACITIES.novotelGourmetBar, zone: 'Gourmet Bar', status: 'available', x: 62, y: 23, shape: 'diamond' },
-  { id: 'n-bar1', tableNumber: 'BAR1', capacity: PROVISIONAL_CAPACITIES.novotelGourmetBar, zone: 'Gourmet Bar', status: 'available', x: 71, y: 23, shape: 'diamond' },
+  // 4. Zone Gourmet Bar - 6 tables (Diamond shape, numbering snakes: BAR4-6 top, BAR3-1 bottom)
+  // BAR4, BAR5, BAR6 left to right at y: 35
+  { id: 'n-bar4', tableNumber: 'BAR4', capacity: PROVISIONAL_CAPACITIES.novotelGourmetBar, zone: 'Gourmet Bar', status: 'available', x: 461, y: 35, shape: 'diamond' },
+  { id: 'n-bar5', tableNumber: 'BAR5', capacity: PROVISIONAL_CAPACITIES.novotelGourmetBar, zone: 'Gourmet Bar', status: 'available', x: 539, y: 35, shape: 'diamond' },
+  { id: 'n-bar6', tableNumber: 'BAR6', capacity: PROVISIONAL_CAPACITIES.novotelGourmetBar, zone: 'Gourmet Bar', status: 'available', x: 615, y: 35, shape: 'diamond' },
+  // BAR3, BAR2, BAR1 left to right at y: 76 (BAR1 bottom-right)
+  { id: 'n-bar3', tableNumber: 'BAR3', capacity: PROVISIONAL_CAPACITIES.novotelGourmetBar, zone: 'Gourmet Bar', status: 'available', x: 461, y: 76, shape: 'diamond' },
+  { id: 'n-bar2', tableNumber: 'BAR2', capacity: PROVISIONAL_CAPACITIES.novotelGourmetBar, zone: 'Gourmet Bar', status: 'available', x: 539, y: 76, shape: 'diamond' },
+  { id: 'n-bar1', tableNumber: 'BAR1', capacity: PROVISIONAL_CAPACITIES.novotelGourmetBar, zone: 'Gourmet Bar', status: 'available', x: 615, y: 76, shape: 'diamond' },
 ];
 
 export const DEFAULT_IBIS_TABLES: DiningTable[] = [
   // All three rows are numbered right to left
-  // 1. Zone Main Dining - Row C (Upper block, 4 tables, y: 48)
-  { id: 'i-c4', tableNumber: 'C4', capacity: PROVISIONAL_CAPACITIES.ibisRowsCB, zone: 'Main Dining', status: 'available', x: 52, y: 48, shape: 'square' },
-  { id: 'i-c3', tableNumber: 'C3', capacity: PROVISIONAL_CAPACITIES.ibisRowsCB, zone: 'Main Dining', status: 'available', x: 56, y: 48, shape: 'square' },
-  { id: 'i-c2', tableNumber: 'C2', capacity: PROVISIONAL_CAPACITIES.ibisRowsCB, zone: 'Main Dining', status: 'available', x: 60, y: 48, shape: 'square' },
-  { id: 'i-c1', tableNumber: 'C1', capacity: PROVISIONAL_CAPACITIES.ibisRowsCB, zone: 'Main Dining', status: 'available', x: 64, y: 48, shape: 'square' },
+  // 1. Zone Main Dining - Row C (y: 200, 4 tables: C4, C3, C2, C1)
+  { id: 'i-c4', tableNumber: 'C4', capacity: PROVISIONAL_CAPACITIES.ibisRowsCB, zone: 'Main Dining', status: 'available', x: 492, y: 200, shape: 'square' },
+  { id: 'i-c3', tableNumber: 'C3', capacity: PROVISIONAL_CAPACITIES.ibisRowsCB, zone: 'Main Dining', status: 'available', x: 528, y: 200, shape: 'square' },
+  { id: 'i-c2', tableNumber: 'C2', capacity: PROVISIONAL_CAPACITIES.ibisRowsCB, zone: 'Main Dining', status: 'available', x: 565, y: 200, shape: 'square' },
+  { id: 'i-c1', tableNumber: 'C1', capacity: PROVISIONAL_CAPACITIES.ibisRowsCB, zone: 'Main Dining', status: 'available', x: 601, y: 200, shape: 'square' },
 
-  // 2. Zone Main Dining - Row B (Lower block, 4 tables, y: 60)
-  { id: 'i-b4', tableNumber: 'B4', capacity: PROVISIONAL_CAPACITIES.ibisRowsCB, zone: 'Main Dining', status: 'available', x: 52, y: 60, shape: 'square' },
-  { id: 'i-b3', tableNumber: 'B3', capacity: PROVISIONAL_CAPACITIES.ibisRowsCB, zone: 'Main Dining', status: 'available', x: 56, y: 60, shape: 'square' },
-  { id: 'i-b2', tableNumber: 'B2', capacity: PROVISIONAL_CAPACITIES.ibisRowsCB, zone: 'Main Dining', status: 'available', x: 60, y: 60, shape: 'square' },
-  { id: 'i-b1', tableNumber: 'B1', capacity: PROVISIONAL_CAPACITIES.ibisRowsCB, zone: 'Main Dining', status: 'available', x: 64, y: 60, shape: 'square' },
+  // 2. Zone Main Dining - Row B (y: 252, 4 tables: B4, B3, B2, B1)
+  { id: 'i-b4', tableNumber: 'B4', capacity: PROVISIONAL_CAPACITIES.ibisRowsCB, zone: 'Main Dining', status: 'available', x: 492, y: 252, shape: 'square' },
+  { id: 'i-b3', tableNumber: 'B3', capacity: PROVISIONAL_CAPACITIES.ibisRowsCB, zone: 'Main Dining', status: 'available', x: 528, y: 252, shape: 'square' },
+  { id: 'i-b2', tableNumber: 'B2', capacity: PROVISIONAL_CAPACITIES.ibisRowsCB, zone: 'Main Dining', status: 'available', x: 565, y: 252, shape: 'square' },
+  { id: 'i-b1', tableNumber: 'B1', capacity: PROVISIONAL_CAPACITIES.ibisRowsCB, zone: 'Main Dining', status: 'available', x: 601, y: 252, shape: 'square' },
 
-  // 3. Zone Main Dining - Row A (6 tables in two groups of three, y: 75)
-  // Gap between A4 and A3 is a doorway
-  { id: 'i-a6', tableNumber: 'A6', capacity: PROVISIONAL_CAPACITIES.ibisRowA, zone: 'Main Dining', status: 'available', x: 48, y: 75, shape: 'square' },
-  { id: 'i-a5', tableNumber: 'A5', capacity: PROVISIONAL_CAPACITIES.ibisRowA, zone: 'Main Dining', status: 'available', x: 53, y: 75, shape: 'square' },
-  { id: 'i-a4', tableNumber: 'A4', capacity: PROVISIONAL_CAPACITIES.ibisRowA, zone: 'Main Dining', status: 'available', x: 58, y: 75, shape: 'square' },
-  { id: 'i-a3', tableNumber: 'A3', capacity: PROVISIONAL_CAPACITIES.ibisRowA, zone: 'Main Dining', status: 'available', x: 70, y: 75, shape: 'square' },
-  { id: 'i-a2', tableNumber: 'A2', capacity: PROVISIONAL_CAPACITIES.ibisRowA, zone: 'Main Dining', status: 'available', x: 75, y: 75, shape: 'square' },
-  { id: 'i-a1', tableNumber: 'A1', capacity: PROVISIONAL_CAPACITIES.ibisRowA, zone: 'Main Dining', status: 'available', x: 80, y: 75, shape: 'square' },
+  // 3. Zone Main Dining - Row A (y: 315, 6 tables: A6, A5, A4, doorway gap, A3, A2, A1)
+  { id: 'i-a6', tableNumber: 'A6', capacity: PROVISIONAL_CAPACITIES.ibisRowA, zone: 'Main Dining', status: 'available', x: 455, y: 315, shape: 'square' },
+  { id: 'i-a5', tableNumber: 'A5', capacity: PROVISIONAL_CAPACITIES.ibisRowA, zone: 'Main Dining', status: 'available', x: 498, y: 315, shape: 'square' },
+  { id: 'i-a4', tableNumber: 'A4', capacity: PROVISIONAL_CAPACITIES.ibisRowA, zone: 'Main Dining', status: 'available', x: 542, y: 315, shape: 'square' },
+  { id: 'i-a3', tableNumber: 'A3', capacity: PROVISIONAL_CAPACITIES.ibisRowA, zone: 'Main Dining', status: 'available', x: 655, y: 315, shape: 'square' },
+  { id: 'i-a2', tableNumber: 'A2', capacity: PROVISIONAL_CAPACITIES.ibisRowA, zone: 'Main Dining', status: 'available', x: 700, y: 315, shape: 'square' },
+  { id: 'i-a1', tableNumber: 'A1', capacity: PROVISIONAL_CAPACITIES.ibisRowA, zone: 'Main Dining', status: 'available', x: 748, y: 315, shape: 'square' },
 ];
 
 export const NOVOTEL_FLOOR_FEATURES: FloorFeature[] = [
-  // Named features (labels printed on architectural plan)
-  { id: 'n-hostess', kind: 'hostess-desk', label: 'HOSTESS DESK', x: 4, y: 58, w: 10, h: 6 },
-  { id: 'n-coffee-stand', kind: 'coffee-stand', label: 'COFFEE STAND', x: 19, y: 62, w: 3, h: 17, verticalLabel: true },
+  // Structure & Architectural features (unlabelled unless stated)
+  { id: 'n-boh-left', kind: 'back-of-house', label: '', x: 0, y: 120, w: 150, h: 205 },
+  { id: 'n-terrace-stairs', kind: 'terrace', label: '', x: 45, y: 53, w: 80, h: 17 },
+  { id: 'n-main-dining-hall', kind: 'back-of-house', label: '', x: 150, y: 120, w: 715, h: 205 },
+  { id: 'n-gb-room', kind: 'back-of-house', label: '', x: 365, y: 20, w: 375, h: 75 },
+  { id: 'n-bar-counter', kind: 'bar-counter', label: '', x: 715, y: 28, w: 20, h: 60 },
+  { id: 'n-round-bar6', kind: 'island', label: '', x: 690, y: 55, w: 22, h: 22, shape: 'round' },
+  { id: 'n-service-c3c4', kind: 'buffet', label: '', x: 340, y: 130, w: 25, h: 18 },
+  { id: 'n-buffet-top', kind: 'buffet', label: '', x: 600, y: 125, w: 110, h: 20 },
+  { id: 'n-buffet-bot', kind: 'buffet', label: '', x: 510, y: 305, w: 235, h: 20 },
+  { id: 'n-buffet-island', kind: 'island', label: '', x: 630, y: 205, w: 100, h: 30, shape: 'round' },
+  { id: 'n-banquette-right-up', kind: 'banquette', label: '', x: 855, y: 25, w: 15, h: 60 },
+  { id: 'n-banquette-right-low', kind: 'banquette', label: '', x: 855, y: 120, w: 15, h: 100 },
+  { id: 'n-bench-left', kind: 'banquette', label: '', x: 150, y: 270, w: 12, h: 45 },
 
-  // Unlabelled features (drawn to match plan shape, label: '')
-  { id: 'n-boh-left', kind: 'back-of-house', label: '', x: 4, y: 15, w: 10, h: 38 },
-  { id: 'n-terrace-stairs', kind: 'terrace', label: '', x: 4, y: 4, w: 12, h: 10 },
-  { id: 'n-gb-room', kind: 'back-of-house', label: '', x: 49, y: 4, w: 36, h: 26 },
-  { id: 'n-bar-counter', kind: 'bar-counter', label: '', x: 79, y: 6, w: 4, h: 22 },
-  { id: 'n-round-bar6', kind: 'island', label: '', x: 79, y: 17, w: 4, h: 6, shape: 'round' },
-  { id: 'n-service-c3c4', kind: 'buffet', label: '', x: 40, y: 40, w: 4, h: 5 },
-  { id: 'n-buffet-top', kind: 'buffet', label: '', x: 58, y: 34, w: 22, h: 5 },
-  { id: 'n-buffet-island', kind: 'island', label: '', x: 62, y: 52, w: 16, h: 12, shape: 'round' },
-  { id: 'n-buffet-bot', kind: 'buffet', label: '', x: 58, y: 72, w: 22, h: 5 },
-  { id: 'n-banquette-right', kind: 'banquette', label: '', x: 92, y: 18, w: 3, h: 66 },
-  { id: 'n-bench-left', kind: 'banquette', label: '', x: 19, y: 82, w: 3, h: 14 },
-  { id: 'n-bench-bot-right', kind: 'banquette', label: '', x: 84, y: 88, w: 10, h: 3 },
+  // Labelled features
+  { id: 'n-hostess', kind: 'hostess-desk', label: 'HOSTESS DESK', x: 35, y: 192, w: 85, h: 22 },
+  { id: 'n-coffee-stand', kind: 'coffee-stand', label: 'COFFEE STAND', x: 175, y: 205, w: 14, h: 55, verticalLabel: true },
 ];
 
 export const IBIS_FLOOR_FEATURES: FloorFeature[] = [
-  // Named features (labels printed on architectural plan)
-  { id: 'i-hostess', kind: 'hostess-desk', label: 'HOSTESS DESK', x: 34, y: 26, w: 10, h: 5 },
-  { id: 'i-front-desk', kind: 'front-desk', label: 'FRONT DESK', x: 72, y: 36, w: 9, h: 5 },
+  // Structure & Architectural features (unlabelled unless stated)
+  { id: 'i-boh-left', kind: 'back-of-house', label: '', x: 0, y: 125, w: 280, h: 210 },
+  { id: 'i-bar-prep', kind: 'back-of-house', label: '', x: 160, y: 0, w: 120, h: 120 },
+  { id: 'i-main-dining-hall', kind: 'back-of-house', label: '', x: 280, y: 120, w: 595, h: 215 },
+  { id: 'i-smoking-terrace', kind: 'smoking-terrace', label: '', x: 280, y: 335, w: 280, h: 85 },
+  { id: 'i-terrace-ext', kind: 'terrace', label: '', x: 890, y: 130, w: 50, h: 290 },
+  { id: 'i-buffet-top-left', kind: 'buffet', label: '', x: 310, y: 10, w: 90, h: 40 },
+  { id: 'i-buffet-top-mid', kind: 'buffet', label: '', x: 470, y: 130, w: 125, h: 25 },
+  { id: 'i-buffet-top-right', kind: 'buffet', label: '', x: 675, y: 130, w: 85, h: 25 },
+  { id: 'i-buffet-island', kind: 'island', label: '', x: 700, y: 205, w: 90, h: 50, shape: 'round' },
+  { id: 'i-tall-unit-left', kind: 'banquette', label: '', x: 405, y: 195, w: 14, h: 70 },
+  { id: 'i-banquette-right-up', kind: 'banquette', label: '', x: 855, y: 140, w: 15, h: 60 },
+  { id: 'i-banquette-right-low', kind: 'banquette', label: '', x: 855, y: 220, w: 15, h: 50 },
+  { id: 'i-bench-bottom-left', kind: 'banquette', label: '', x: 560, y: 400, w: 100, h: 18 },
+  { id: 'i-bench-bottom-mid', kind: 'banquette', label: '', x: 675, y: 400, w: 100, h: 18 },
+  { id: 'i-bench-bottom-right', kind: 'banquette', label: '', x: 790, y: 400, w: 90, h: 18 },
 
-  // Unlabelled features (drawn to match plan shape, label: '')
-  { id: 'i-boh-left', kind: 'back-of-house', label: '', x: 4, y: 32, w: 26, h: 48 },
-  { id: 'i-bar-prep', kind: 'back-of-house', label: '', x: 18, y: 6, w: 14, h: 22 },
-  { id: 'i-buffet-top', kind: 'buffet', label: '', x: 46, y: 24, w: 22, h: 6 },
-  { id: 'i-buffet-island', kind: 'island', label: '', x: 38, y: 48, w: 6, h: 12, shape: 'round' },
-  { id: 'i-div-left', kind: 'banquette', label: '', x: 44, y: 40, w: 1.2, h: 26 },
-  { id: 'i-div-right', kind: 'banquette', label: '', x: 68, y: 40, w: 1.2, h: 26 },
-  { id: 'i-banquette-right', kind: 'banquette', label: '', x: 88, y: 18, w: 2.5, h: 58 },
-  { id: 'i-terrace-ext', kind: 'terrace', label: '', x: 93, y: 34, w: 5, h: 32 },
-  { id: 'i-smoking-terrace', kind: 'smoking-terrace', label: '', x: 32, y: 78, w: 26, h: 18 },
-  { id: 'i-bench-bottom', kind: 'banquette', label: '', x: 62, y: 92, w: 26, h: 3 },
+  // Unlabelled round shapes
+  { id: 'i-round-unit-left', kind: 'island', label: '', x: 350, y: 218, w: 36, h: 36, shape: 'round' },
+  { id: 'i-round-right-1', kind: 'island', label: '', x: 850, y: 150, w: 24, h: 24, shape: 'round' },
+  { id: 'i-round-right-2', kind: 'island', label: '', x: 850, y: 235, w: 24, h: 24, shape: 'round' },
+  { id: 'i-terrace-t1', kind: 'island', label: '', x: 905, y: 175, w: 20, h: 20, shape: 'round' },
+  { id: 'i-terrace-t2', kind: 'island', label: '', x: 905, y: 205, w: 20, h: 20, shape: 'round' },
+
+  // Labelled features
+  { id: 'i-hostess', kind: 'hostess-desk', label: 'HOSTESS DESK', x: 320, y: 118, w: 90, h: 20 },
+  { id: 'i-front-desk', kind: 'front-desk', label: 'FRONT DESK', x: 683, y: 158, w: 74, h: 20 },
 ];
