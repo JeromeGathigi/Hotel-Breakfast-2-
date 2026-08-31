@@ -109,114 +109,106 @@ export const OVER_CAPACITY_REASONS = {
 };
 
 export const DEFAULT_NOVOTEL_TABLES: DiningTable[] = [
-  // 1. Main Dining Row 1 (y: 40) - 4x 2-tops, 2x 4-tops (6 tables)
-  { id: 'n-fx-01', tableNumber: 'FX-01', capacity: 2, zone: 'Main Dining', status: 'available', x: 22, y: 40, shape: 'square' },
-  { id: 'n-fx-02', tableNumber: 'FX-02', capacity: 2, zone: 'Main Dining', status: 'available', x: 29, y: 40, shape: 'square' },
-  { id: 'n-fx-03', tableNumber: 'FX-03', capacity: 2, zone: 'Main Dining', status: 'available', x: 36, y: 40, shape: 'square' },
-  { id: 'n-fx-04', tableNumber: 'FX-04', capacity: 2, zone: 'Main Dining', status: 'available', x: 43, y: 40, shape: 'square' },
-  { id: 'n-fx-05', tableNumber: 'FX-05', capacity: 4, zone: 'Main Dining', status: 'available', x: 52, y: 40, shape: 'rectangle' },
-  { id: 'n-fx-06', tableNumber: 'FX-06', capacity: 4, zone: 'Main Dining', status: 'available', x: 59, y: 40, shape: 'rectangle' },
+  // 1. Gourmet Bar (Top Enclosed Box) - 6x Diamond 4-tops + 1x Round Cocktail
+  // Top Row: BAR4, BAR5, BAR6
+  { id: 'n-bar4', tableNumber: 'BAR4', capacity: 4, zone: 'Gourmet Bar', status: 'available', x: 42, y: 13, shape: 'diamond' },
+  { id: 'n-bar5', tableNumber: 'BAR5', capacity: 4, zone: 'Gourmet Bar', status: 'available', x: 49, y: 13, shape: 'diamond' },
+  { id: 'n-bar6', tableNumber: 'BAR6', capacity: 4, zone: 'Gourmet Bar', status: 'available', x: 56, y: 13, shape: 'diamond' },
+  // Bottom Row: BAR3, BAR2, BAR1
+  { id: 'n-bar3', tableNumber: 'BAR3', capacity: 4, zone: 'Gourmet Bar', status: 'available', x: 42, y: 23, shape: 'diamond' },
+  { id: 'n-bar2', tableNumber: 'BAR2', capacity: 4, zone: 'Gourmet Bar', status: 'available', x: 49, y: 23, shape: 'diamond' },
+  { id: 'n-bar1', tableNumber: 'BAR1', capacity: 4, zone: 'Gourmet Bar', status: 'available', x: 56, y: 23, shape: 'diamond' },
+  { id: 'n-bar-r', tableNumber: 'BAR-R', capacity: 4, zone: 'Gourmet Bar', status: 'available', x: 64, y: 18, shape: 'round' },
 
-  // 2. Main Dining Row 2 (y: 62) - 5x 4-tops (5 tables)
-  { id: 'n-fx-07', tableNumber: 'FX-07', capacity: 4, zone: 'Main Dining', status: 'available', x: 29, y: 62, shape: 'rectangle' },
-  { id: 'n-fx-08', tableNumber: 'FX-08', capacity: 4, zone: 'Main Dining', status: 'available', x: 36, y: 62, shape: 'rectangle' },
-  { id: 'n-fx-09', tableNumber: 'FX-09', capacity: 4, zone: 'Main Dining', status: 'available', x: 43, y: 62, shape: 'rectangle' },
-  { id: 'n-fx-10', tableNumber: 'FX-10', capacity: 4, zone: 'Main Dining', status: 'available', x: 50, y: 62, shape: 'rectangle' },
-  { id: 'n-fx-11', tableNumber: 'FX-11', capacity: 4, zone: 'Main Dining', status: 'available', x: 57, y: 62, shape: 'rectangle' },
+  // 2. Main Dining Room - Row C (Top Row: C1, C2, C3, gap, C4, C5)
+  { id: 'n-c1', tableNumber: 'C1', capacity: 4, zone: 'Main Dining', status: 'available', x: 23, y: 36, shape: 'square' },
+  { id: 'n-c2', tableNumber: 'C2', capacity: 4, zone: 'Main Dining', status: 'available', x: 28, y: 36, shape: 'square' },
+  { id: 'n-c3', tableNumber: 'C3', capacity: 4, zone: 'Main Dining', status: 'available', x: 33, y: 36, shape: 'square' },
+  { id: 'n-c4', tableNumber: 'C4', capacity: 4, zone: 'Main Dining', status: 'available', x: 43, y: 36, shape: 'square' },
+  { id: 'n-c5', tableNumber: 'C5', capacity: 4, zone: 'Main Dining', status: 'available', x: 48, y: 36, shape: 'square' },
 
-  // 3. Main Dining Row 3 (y: 86) - 6x 2-tops (6 tables)
-  { id: 'n-fx-12', tableNumber: 'FX-12', capacity: 2, zone: 'Main Dining', status: 'available', x: 25, y: 86, shape: 'square' },
-  { id: 'n-fx-13', tableNumber: 'FX-13', capacity: 2, zone: 'Main Dining', status: 'available', x: 32, y: 86, shape: 'square' },
-  { id: 'n-fx-14', tableNumber: 'FX-14', capacity: 2, zone: 'Main Dining', status: 'available', x: 39, y: 86, shape: 'square' },
-  { id: 'n-fx-15', tableNumber: 'FX-15', capacity: 2, zone: 'Main Dining', status: 'available', x: 46, y: 86, shape: 'square' },
-  { id: 'n-fx-16', tableNumber: 'FX-16', capacity: 2, zone: 'Main Dining', status: 'available', x: 53, y: 86, shape: 'square' },
-  { id: 'n-fx-17', tableNumber: 'FX-17', capacity: 2, zone: 'Main Dining', status: 'available', x: 60, y: 86, shape: 'square' },
+  // 3. Main Dining Room - Row B (Middle Row: B1, B2, B3, B4, B5)
+  { id: 'n-b1', tableNumber: 'B1', capacity: 4, zone: 'Main Dining', status: 'available', x: 27, y: 54, shape: 'square' },
+  { id: 'n-b2', tableNumber: 'B2', capacity: 4, zone: 'Main Dining', status: 'available', x: 32, y: 54, shape: 'square' },
+  { id: 'n-b3', tableNumber: 'B3', capacity: 4, zone: 'Main Dining', status: 'available', x: 37, y: 54, shape: 'square' },
+  { id: 'n-b4', tableNumber: 'B4', capacity: 4, zone: 'Main Dining', status: 'available', x: 42, y: 54, shape: 'square' },
+  { id: 'n-b5', tableNumber: 'B5', capacity: 4, zone: 'Main Dining', status: 'available', x: 47, y: 54, shape: 'square' },
 
-  // 4. Gourmet Bar (Enclosed Room Top-Right) - Diagonal Row 1 (y: 12) (3 tables)
-  { id: 'n-gb-01', tableNumber: 'GB-01', capacity: 4, zone: 'Gourmet Bar', status: 'available', x: 53, y: 12, shape: 'diamond' },
-  { id: 'n-gb-02', tableNumber: 'GB-02', capacity: 4, zone: 'Gourmet Bar', status: 'available', x: 62, y: 12, shape: 'diamond' },
-  { id: 'n-gb-03', tableNumber: 'GB-03', capacity: 4, zone: 'Gourmet Bar', status: 'available', x: 70, y: 12, shape: 'diamond' },
+  // 4. Main Dining Room - Row A (Bottom Row: A1, A2, A3, A4, A5, A6)
+  { id: 'n-a1', tableNumber: 'A1', capacity: 4, zone: 'Main Dining', status: 'available', x: 23, y: 74, shape: 'square' },
+  { id: 'n-a2', tableNumber: 'A2', capacity: 4, zone: 'Main Dining', status: 'available', x: 28, y: 74, shape: 'square' },
+  { id: 'n-a3', tableNumber: 'A3', capacity: 4, zone: 'Main Dining', status: 'available', x: 33, y: 74, shape: 'square' },
+  { id: 'n-a4', tableNumber: 'A4', capacity: 4, zone: 'Main Dining', status: 'available', x: 38, y: 74, shape: 'square' },
+  { id: 'n-a5', tableNumber: 'A5', capacity: 4, zone: 'Main Dining', status: 'available', x: 43, y: 74, shape: 'square' },
+  { id: 'n-a6', tableNumber: 'A6', capacity: 4, zone: 'Main Dining', status: 'available', x: 48, y: 74, shape: 'square' },
 
-  // 5. Gourmet Bar - Diagonal Row 2 (y: 24) (3 tables)
-  { id: 'n-gb-04', tableNumber: 'GB-04', capacity: 4, zone: 'Gourmet Bar', status: 'available', x: 53, y: 24, shape: 'diamond' },
-  { id: 'n-gb-05', tableNumber: 'GB-05', capacity: 4, zone: 'Gourmet Bar', status: 'available', x: 62, y: 24, shape: 'diamond' },
-  { id: 'n-gb-06', tableNumber: 'GB-06', capacity: 4, zone: 'Gourmet Bar', status: 'available', x: 70, y: 24, shape: 'diamond' },
+  // 5. Window Booths / Right Wall Banquettes
+  { id: 'n-wb-01', tableNumber: 'WB-01', capacity: 4, zone: 'Window Booths', status: 'available', x: 88, y: 32, shape: 'booth' },
+  { id: 'n-wb-02', tableNumber: 'WB-02', capacity: 4, zone: 'Window Booths', status: 'available', x: 88, y: 54, shape: 'booth' },
+  { id: 'n-wb-03', tableNumber: 'WB-03', capacity: 4, zone: 'Window Booths', status: 'available', x: 88, y: 74, shape: 'booth' },
 
-  // 6. Gourmet Bar - Round Feature Table (y: 17, x: 79) (1 table)
-  { id: 'n-gb-07', tableNumber: 'GB-07', capacity: 4, zone: 'Gourmet Bar', status: 'available', x: 79, y: 17, shape: 'round' },
-
-  // 7. Window Booths (Right Wall x: 95) (5 tables)
-  { id: 'n-wb-01', tableNumber: 'WB-01', capacity: 4, zone: 'Window Booths', status: 'available', x: 95, y: 20, shape: 'booth' },
-  { id: 'n-wb-02', tableNumber: 'WB-02', capacity: 4, zone: 'Window Booths', status: 'available', x: 95, y: 30, shape: 'booth' },
-  { id: 'n-wb-03', tableNumber: 'WB-03', capacity: 4, zone: 'Window Booths', status: 'available', x: 95, y: 55, shape: 'booth' },
-  { id: 'n-wb-04', tableNumber: 'WB-04', capacity: 4, zone: 'Window Booths', status: 'available', x: 95, y: 65, shape: 'booth' },
-  { id: 'n-wb-05', tableNumber: 'WB-05', capacity: 4, zone: 'Window Booths', status: 'available', x: 95, y: 75, shape: 'booth' },
-
-  // 8. Wall Banquette (Left Wall x: 8) (3 tables)
-  { id: 'n-wbq-01', tableNumber: 'WBQ-01', capacity: 2, zone: 'Wall Banquette', status: 'available', x: 8, y: 50, shape: 'rectangle' },
-  { id: 'n-wbq-02', tableNumber: 'WBQ-02', capacity: 2, zone: 'Wall Banquette', status: 'available', x: 8, y: 62, shape: 'rectangle' },
-  { id: 'n-wbq-03', tableNumber: 'WBQ-03', capacity: 2, zone: 'Wall Banquette', status: 'available', x: 8, y: 74, shape: 'rectangle' },
-
-  // 9. Wall Banquette (Bottom Wall y: 96) (2 tables)
-  { id: 'n-wbq-04', tableNumber: 'WBQ-04', capacity: 2, zone: 'Wall Banquette', status: 'available', x: 70, y: 96, shape: 'rectangle' },
-  { id: 'n-wbq-05', tableNumber: 'WBQ-05', capacity: 2, zone: 'Wall Banquette', status: 'available', x: 80, y: 96, shape: 'rectangle' },
+  // 6. Outside Terrace (Top-Left Outdoor Garden)
+  { id: 'n-tr-01', tableNumber: 'TR-01', capacity: 2, zone: 'Terrace', status: 'available', x: 8, y: 14, shape: 'square' },
+  { id: 'n-tr-02', tableNumber: 'TR-02', capacity: 2, zone: 'Terrace', status: 'available', x: 13, y: 14, shape: 'square' },
 ];
 
 export const DEFAULT_IBIS_TABLES: DiningTable[] = [
-  // 1. Main Dining Block Row 1 (y: 45) - 4x 4-tops (4 tables)
-  { id: 'i-cc-01', tableNumber: 'CC-01', capacity: 4, zone: 'Main Dining', status: 'available', x: 40, y: 45, shape: 'square' },
-  { id: 'i-cc-02', tableNumber: 'CC-02', capacity: 4, zone: 'Main Dining', status: 'available', x: 48, y: 45, shape: 'square' },
-  { id: 'i-cc-03', tableNumber: 'CC-03', capacity: 4, zone: 'Main Dining', status: 'available', x: 56, y: 45, shape: 'square' },
-  { id: 'i-cc-04', tableNumber: 'CC-04', capacity: 4, zone: 'Main Dining', status: 'available', x: 64, y: 45, shape: 'square' },
+  // 1. Center Dining Block - Row C (Top: C4, C3, C2, C1)
+  { id: 'i-c4', tableNumber: 'C4', capacity: 4, zone: 'Main Dining', status: 'available', x: 48, y: 44, shape: 'square' },
+  { id: 'i-c3', tableNumber: 'C3', capacity: 4, zone: 'Main Dining', status: 'available', x: 53, y: 44, shape: 'square' },
+  { id: 'i-c2', tableNumber: 'C2', capacity: 4, zone: 'Main Dining', status: 'available', x: 58, y: 44, shape: 'square' },
+  { id: 'i-c1', tableNumber: 'C1', capacity: 4, zone: 'Main Dining', status: 'available', x: 63, y: 44, shape: 'square' },
 
-  // 2. Main Dining Block Row 2 (y: 57) - 4x 4-tops (4 tables)
-  { id: 'i-cc-05', tableNumber: 'CC-05', capacity: 4, zone: 'Main Dining', status: 'available', x: 40, y: 57, shape: 'square' },
-  { id: 'i-cc-06', tableNumber: 'CC-06', capacity: 4, zone: 'Main Dining', status: 'available', x: 48, y: 57, shape: 'square' },
-  { id: 'i-cc-07', tableNumber: 'CC-07', capacity: 4, zone: 'Main Dining', status: 'available', x: 56, y: 57, shape: 'square' },
-  { id: 'i-cc-08', tableNumber: 'CC-08', capacity: 4, zone: 'Main Dining', status: 'available', x: 64, y: 57, shape: 'square' },
+  // 2. Center Dining Block - Row B (Bottom: B4, B3, B2, B1)
+  { id: 'i-b4', tableNumber: 'B4', capacity: 4, zone: 'Main Dining', status: 'available', x: 48, y: 57, shape: 'square' },
+  { id: 'i-b3', tableNumber: 'B3', capacity: 4, zone: 'Main Dining', status: 'available', x: 53, y: 57, shape: 'square' },
+  { id: 'i-b2', tableNumber: 'B2', capacity: 4, zone: 'Main Dining', status: 'available', x: 58, y: 57, shape: 'square' },
+  { id: 'i-b1', tableNumber: 'B1', capacity: 4, zone: 'Main Dining', status: 'available', x: 63, y: 57, shape: 'square' },
 
-  // 3. Main Dining Lower Row (y: 78) - 5x 2-tops (5 tables)
-  { id: 'i-cc-09', tableNumber: 'CC-09', capacity: 2, zone: 'Main Dining', status: 'available', x: 38, y: 78, shape: 'square' },
-  { id: 'i-cc-10', tableNumber: 'CC-10', capacity: 2, zone: 'Main Dining', status: 'available', x: 46, y: 78, shape: 'square' },
-  { id: 'i-cc-11', tableNumber: 'CC-11', capacity: 2, zone: 'Main Dining', status: 'available', x: 54, y: 78, shape: 'square' },
-  { id: 'i-cc-12', tableNumber: 'CC-12', capacity: 2, zone: 'Main Dining', status: 'available', x: 62, y: 78, shape: 'square' },
-  { id: 'i-cc-13', tableNumber: 'CC-13', capacity: 2, zone: 'Main Dining', status: 'available', x: 70, y: 78, shape: 'square' },
+  // 3. Lower Row A (Left: A6, A5, A4 | Right: A3, A2, A1)
+  { id: 'i-a6', tableNumber: 'A6', capacity: 2, zone: 'Main Dining', status: 'available', x: 46, y: 70, shape: 'square' },
+  { id: 'i-a5', tableNumber: 'A5', capacity: 2, zone: 'Main Dining', status: 'available', x: 51, y: 70, shape: 'square' },
+  { id: 'i-a4', tableNumber: 'A4', capacity: 2, zone: 'Main Dining', status: 'available', x: 56, y: 70, shape: 'square' },
+  { id: 'i-a3', tableNumber: 'A3', capacity: 2, zone: 'Main Dining', status: 'available', x: 66, y: 70, shape: 'square' },
+  { id: 'i-a2', tableNumber: 'A2', capacity: 2, zone: 'Main Dining', status: 'available', x: 71, y: 70, shape: 'square' },
+  { id: 'i-a1', tableNumber: 'A1', capacity: 2, zone: 'Main Dining', status: 'available', x: 76, y: 70, shape: 'square' },
 
-  // 4. Main Dining Round Tables (Right Wall x: 78) (2 tables)
-  { id: 'i-cc-14', tableNumber: 'CC-14', capacity: 4, zone: 'Main Dining', status: 'available', x: 78, y: 45, shape: 'round' },
-  { id: 'i-cc-15', tableNumber: 'CC-15', capacity: 4, zone: 'Main Dining', status: 'available', x: 78, y: 62, shape: 'round' },
+  // 4. Outdoor Smoking Terrace (Bottom cyan area with smoking icon - 4 tables)
+  { id: 'i-smk-1', tableNumber: 'SMK-1', capacity: 4, zone: 'Smoking Terrace', status: 'available', x: 40, y: 83, shape: 'square', isSmoking: true },
+  { id: 'i-smk-2', tableNumber: 'SMK-2', capacity: 4, zone: 'Smoking Terrace', status: 'available', x: 47, y: 83, shape: 'square', isSmoking: true },
+  { id: 'i-smk-3', tableNumber: 'SMK-3', capacity: 4, zone: 'Smoking Terrace', status: 'available', x: 40, y: 92, shape: 'square', isSmoking: true },
+  { id: 'i-smk-4', tableNumber: 'SMK-4', capacity: 4, zone: 'Smoking Terrace', status: 'available', x: 47, y: 92, shape: 'square', isSmoking: true },
 
-  // 5. Window Booths (Right Wall x: 92) (3 tables)
-  { id: 'i-wb-01', tableNumber: 'WB-01', capacity: 4, zone: 'Window Booths', status: 'available', x: 92, y: 30, shape: 'booth' },
-  { id: 'i-wb-02', tableNumber: 'WB-02', capacity: 4, zone: 'Window Booths', status: 'available', x: 92, y: 42, shape: 'booth' },
-  { id: 'i-wb-03', tableNumber: 'WB-03', capacity: 4, zone: 'Window Booths', status: 'available', x: 92, y: 54, shape: 'booth' },
+  // 5. Right Feature & Round Tables
+  { id: 'i-r1', tableNumber: 'R1', capacity: 4, zone: 'Main Dining', status: 'available', x: 81, y: 38, shape: 'round' },
+  { id: 'i-r2', tableNumber: 'R2', capacity: 4, zone: 'Main Dining', status: 'available', x: 81, y: 50, shape: 'round' },
+  { id: 'i-r3', tableNumber: 'R3', capacity: 4, zone: 'Main Dining', status: 'available', x: 81, y: 62, shape: 'round' },
+  { id: 'i-f1', tableNumber: 'F-01', capacity: 4, zone: 'Main Dining', status: 'available', x: 72, y: 50, shape: 'round' },
 
-  // 6. Terrace (Outside Right Wall x: 98) (2 tables)
-  { id: 'i-ter-01', tableNumber: 'TER-01', capacity: 2, zone: 'Terrace', status: 'available', x: 98, y: 40, shape: 'square' },
-  { id: 'i-ter-02', tableNumber: 'TER-02', capacity: 2, zone: 'Terrace', status: 'available', x: 98, y: 48, shape: 'square' },
-
-  // 7. Outdoor Smoking Terrace (Bottom y: 92) (3 tables)
-  { id: 'i-smk-01', tableNumber: 'SMK-01', capacity: 4, zone: 'Smoking Terrace', status: 'available', x: 42, y: 92, shape: 'square', isSmoking: true },
-  { id: 'i-smk-02', tableNumber: 'SMK-02', capacity: 4, zone: 'Smoking Terrace', status: 'available', x: 50, y: 92, shape: 'square', isSmoking: true },
-  { id: 'i-smk-03', tableNumber: 'SMK-03', capacity: 4, zone: 'Smoking Terrace', status: 'available', x: 58, y: 92, shape: 'square', isSmoking: true },
+  // 6. Outside Right Terrace
+  { id: 'i-ter-1', tableNumber: 'TER-01', capacity: 2, zone: 'Terrace', status: 'available', x: 94, y: 42, shape: 'square' },
+  { id: 'i-ter-2', tableNumber: 'TER-02', capacity: 2, zone: 'Terrace', status: 'available', x: 94, y: 52, shape: 'square' },
 ];
 
 export const NOVOTEL_FLOOR_FEATURES: FloorFeature[] = [
-  { id: 'n-boh', kind: 'back-of-house', label: 'Back of House / Kitchen', x: 0, y: 30, w: 16, h: 70 },
-  { id: 'n-buffet-top', kind: 'buffet', label: 'Buffet Counter (Hot Line)', x: 66, y: 42, w: 24, h: 5 },
-  { id: 'n-buffet-bot', kind: 'buffet', label: 'Buffet Counter (Cold Station)', x: 62, y: 90, w: 24, h: 5 },
-  { id: 'n-buffet-isl', kind: 'island', label: 'Buffet Island', x: 68, y: 62, w: 14, h: 9, shape: 'round' },
-  { id: 'n-bar-counter', kind: 'bar-counter', label: 'Bar Counter', x: 86, y: 10, w: 4, h: 18 },
-  { id: 'n-entrance', kind: 'entrance', label: 'Entrance', x: 88, y: 92, w: 10, h: 6 },
+  { id: 'n-hostess', kind: 'host-desk', label: 'HOSTESS DESK', x: 3, y: 26, w: 15, h: 52 },
+  { id: 'n-coffee-stand', kind: 'bar-counter', label: 'COFFEE STAND', x: 18, y: 26, w: 2.5, h: 52 },
+  { id: 'n-terrace-stairs', kind: 'back-of-house', label: 'Stairs & Terrace', x: 3, y: 6, w: 15, h: 18 },
+  { id: 'n-gb-room', kind: 'bar-counter', label: 'Gourmet Bar Room', x: 36, y: 6, w: 40, h: 24 },
+  { id: 'n-buffet-top', kind: 'buffet', label: 'Buffet Counter', x: 54, y: 34, w: 22, h: 5 },
+  { id: 'n-buffet-island', kind: 'island', label: 'Buffet Island', x: 58, y: 48, w: 14, h: 12, shape: 'round' },
+  { id: 'n-buffet-bot', kind: 'buffet', label: 'Buffet Counter', x: 54, y: 72, w: 22, h: 5 },
+  { id: 'n-banquette-right', kind: 'buffet', label: 'Window Banquette', x: 93, y: 20, w: 3, h: 60 },
 ];
 
 export const IBIS_FLOOR_FEATURES: FloorFeature[] = [
-  { id: 'i-boh', kind: 'back-of-house', label: 'Back of House / Kitchen', x: 0, y: 30, w: 22, h: 55 },
-  { id: 'i-bar-prep', kind: 'bar-counter', label: 'Bar & Prep Pass', x: 24, y: 5, w: 14, h: 20 },
-  { id: 'i-buffet-1', kind: 'buffet', label: 'Buffet Counter', x: 30, y: 26, w: 14, h: 5 },
-  { id: 'i-buffet-2', kind: 'buffet', label: 'Buffet Counter', x: 48, y: 26, w: 14, h: 5 },
-  { id: 'i-buffet-3', kind: 'buffet', label: 'Buffet Counter', x: 64, y: 26, w: 12, h: 5 },
-  { id: 'i-buffet-isl', kind: 'island', label: 'Buffet Island', x: 70, y: 52, w: 12, h: 10, shape: 'round' },
-  { id: 'i-host-desk', kind: 'host-desk', label: 'Host Desk', x: 34, y: 44, w: 3, h: 8 },
-  { id: 'i-entrance', kind: 'entrance', label: 'Entrance', x: 48, y: 92, w: 10, h: 6 },
+  { id: 'i-bar-prep', kind: 'back-of-house', label: 'Bar & Prep Pass', x: 20, y: 6, w: 12, h: 22 },
+  { id: 'i-hostess', kind: 'host-desk', label: 'HOSTESS DESK', x: 38, y: 24, w: 8, h: 5 },
+  { id: 'i-front-desk', kind: 'host-desk', label: 'FRONT DESK', x: 68, y: 24, w: 8, h: 5 },
+  { id: 'i-buffet-top', kind: 'buffet', label: 'Buffet Counter', x: 48, y: 24, w: 16, h: 5 },
+  { id: 'i-buffet-island', kind: 'island', label: 'Buffet Island', x: 38, y: 52, w: 5, h: 10, shape: 'round' },
+  { id: 'i-div-left', kind: 'buffet', label: 'Divider', x: 44, y: 40, w: 1.2, h: 24 },
+  { id: 'i-div-right', kind: 'buffet', label: 'Divider', x: 67, y: 40, w: 1.2, h: 24 },
+  { id: 'i-smoking-box', kind: 'entrance', label: 'Smoking Terrace', x: 32, y: 78, w: 24, h: 18 },
+  { id: 'i-terrace-right', kind: 'entrance', label: 'Terrace', x: 92, y: 34, w: 5, h: 32 },
 ];

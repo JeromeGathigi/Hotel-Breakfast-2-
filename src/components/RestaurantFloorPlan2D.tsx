@@ -138,19 +138,19 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
         {/* 1. Diamond Table (Gourmet Bar 4-tops) */}
         {shape === 'diamond' && (
           <div className="relative flex items-center justify-center p-1">
-            {/* 4 Chairs rotated around diamond */}
-            <div className={`absolute -top-1 w-2.5 h-2.5 rounded-full ${colors.chair} border shadow-xs`} />
-            <div className={`absolute -bottom-1 w-2.5 h-2.5 rounded-full ${colors.chair} border shadow-xs`} />
-            <div className={`absolute -left-1 w-2.5 h-2.5 rounded-full ${colors.chair} border shadow-xs`} />
-            <div className={`absolute -right-1 w-2.5 h-2.5 rounded-full ${colors.chair} border shadow-xs`} />
+            {/* 4 Chairs rotated around diamond faces */}
+            <div className={`absolute -top-1.5 w-2.5 h-2.5 rounded-full ${colors.chair} border shadow-2xs`} />
+            <div className={`absolute -bottom-1.5 w-2.5 h-2.5 rounded-full ${colors.chair} border shadow-2xs`} />
+            <div className={`absolute -left-1.5 w-2.5 h-2.5 rounded-full ${colors.chair} border shadow-2xs`} />
+            <div className={`absolute -right-1.5 w-2.5 h-2.5 rounded-full ${colors.chair} border shadow-2xs`} />
 
-            <div className={`w-14 h-14 rotate-45 rounded-xl border flex flex-col items-center justify-center transition-all ${colors.bg} ${colors.border}`}>
+            <div className={`w-9 h-9 rotate-45 rounded-lg border flex flex-col items-center justify-center transition-all ${colors.bg} ${colors.border}`}>
               <div className="-rotate-45 text-center px-0.5">
-                <span className="font-mono-custom font-extrabold text-[11px] leading-none tracking-tight block">
+                <span className="font-mono-custom font-black text-[10px] leading-none tracking-tight block">
                   {table.tableNumber}
                 </span>
-                <span className="text-[9px] font-mono-custom opacity-80 block mt-0.5">
-                  {table.status === 'occupied' ? `RM ${table.occupiedByRoom}` : `${table.capacity}P`}
+                <span className="text-[7.5px] font-mono-custom opacity-85 block mt-0.5">
+                  {table.status === 'occupied' ? `R${table.occupiedByRoom}` : `${table.capacity}P`}
                 </span>
               </div>
             </div>
@@ -160,31 +160,18 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
         {/* 2. Round Table (VIP or High Tops) */}
         {shape === 'round' && (
           <div className="relative flex items-center justify-center p-1">
-            {/* Radial Chairs */}
-            {table.capacity >= 6 ? (
-              <>
-                <div className={`absolute -top-1.5 w-3 h-3 rounded-full ${colors.chair} border shadow-xs`} />
-                <div className={`absolute -bottom-1.5 w-3 h-3 rounded-full ${colors.chair} border shadow-xs`} />
-                <div className={`absolute -left-1.5 w-3 h-3 rounded-full ${colors.chair} border shadow-xs`} />
-                <div className={`absolute -right-1.5 w-3 h-3 rounded-full ${colors.chair} border shadow-xs`} />
-                <div className={`absolute top-1 -left-1 w-2.5 h-2.5 rounded-full ${colors.chair} border shadow-xs`} />
-                <div className={`absolute top-1 -right-1 w-2.5 h-2.5 rounded-full ${colors.chair} border shadow-xs`} />
-              </>
-            ) : (
-              <>
-                <div className={`absolute -top-1.5 w-2.5 h-2.5 rounded-full ${colors.chair} border shadow-xs`} />
-                <div className={`absolute -bottom-1.5 w-2.5 h-2.5 rounded-full ${colors.chair} border shadow-xs`} />
-                {table.capacity >= 3 && <div className={`absolute -left-1.5 w-2.5 h-2.5 rounded-full ${colors.chair} border shadow-xs`} />}
-                {table.capacity >= 4 && <div className={`absolute -right-1.5 w-2.5 h-2.5 rounded-full ${colors.chair} border shadow-xs`} />}
-              </>
-            )}
+            {/* 4 Radial Chairs */}
+            <div className={`absolute -top-1.5 w-2.5 h-2.5 rounded-full ${colors.chair} border shadow-2xs`} />
+            <div className={`absolute -bottom-1.5 w-2.5 h-2.5 rounded-full ${colors.chair} border shadow-2xs`} />
+            <div className={`absolute -left-1.5 w-2.5 h-2.5 rounded-full ${colors.chair} border shadow-2xs`} />
+            <div className={`absolute -right-1.5 w-2.5 h-2.5 rounded-full ${colors.chair} border shadow-2xs`} />
 
-            <div className={`${table.capacity >= 6 ? 'w-16 h-16' : 'w-12 h-12'} rounded-full border flex flex-col items-center justify-center transition-all ${colors.bg} ${colors.border}`}>
-              <span className="font-mono-custom font-extrabold text-[11px] leading-tight">
+            <div className={`w-10 h-10 rounded-full border flex flex-col items-center justify-center transition-all ${colors.bg} ${colors.border}`}>
+              <span className="font-mono-custom font-black text-[10px] leading-tight">
                 {table.tableNumber}
               </span>
-              <span className="text-[9px] font-mono-custom opacity-85">
-                {table.status === 'occupied' ? `RM ${table.occupiedByRoom}` : `${table.capacity} Pax`}
+              <span className="text-[7.5px] font-mono-custom opacity-85">
+                {table.status === 'occupied' ? `R${table.occupiedByRoom}` : `${table.capacity}P`}
               </span>
             </div>
           </div>
@@ -194,13 +181,13 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
         {shape === 'semi_circle' && (
           <div className="relative flex flex-col items-center justify-center p-1">
             {/* Curved Backrest Strip */}
-            <div className="w-18 h-6 rounded-t-full border-t-2 border-x-2 border-black/20 bg-black/5 -mb-2" />
-            <div className={`w-16 h-12 rounded-t-full rounded-b-xl border flex flex-col items-center justify-center transition-all ${colors.bg} ${colors.border}`}>
-              <span className="font-mono-custom font-extrabold text-[11px] leading-tight mt-1">
+            <div className="w-14 h-4 rounded-t-full border-t-2 border-x-2 border-stone-400 bg-stone-200 -mb-1.5" />
+            <div className={`w-12 h-9 rounded-t-full rounded-b-md border flex flex-col items-center justify-center transition-all ${colors.bg} ${colors.border}`}>
+              <span className="font-mono-custom font-black text-[9.5px] leading-tight mt-0.5">
                 {table.tableNumber}
               </span>
-              <span className="text-[8px] font-mono-custom opacity-85">
-                {table.status === 'occupied' ? `RM ${table.occupiedByRoom}` : `${table.capacity} Seats`}
+              <span className="text-[7.5px] font-mono-custom opacity-85">
+                {table.status === 'occupied' ? `R${table.occupiedByRoom}` : `${table.capacity}P`}
               </span>
             </div>
           </div>
@@ -210,24 +197,24 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
         {shape === 'booth' && (
           <div className="relative flex flex-col items-center justify-center p-1">
             {/* Top & Bottom Booth Backrests */}
-            <div className="w-14 h-1.5 rounded-t-md bg-stone-400/80 border border-stone-500/60 mb-0.5" />
-            <div className={`w-14 h-10 rounded-lg border flex flex-col items-center justify-center transition-all ${colors.bg} ${colors.border}`}>
-              <span className="font-mono-custom font-extrabold text-[11px] leading-none">
+            <div className="w-11 h-1.5 rounded-t-sm bg-cyan-700/80 border border-cyan-800 mb-0.5" />
+            <div className={`w-11 h-8 rounded-sm border flex flex-col items-center justify-center transition-all ${colors.bg} ${colors.border}`}>
+              <span className="font-mono-custom font-black text-[9.5px] leading-none">
                 {table.tableNumber}
               </span>
-              <span className="text-[8px] font-mono-custom opacity-85 mt-0.5">
-                {table.status === 'occupied' ? `RM ${table.occupiedByRoom}` : `${table.capacity}P`}
+              <span className="text-[7.5px] font-mono-custom opacity-85 mt-0.5">
+                {table.status === 'occupied' ? `R${table.occupiedByRoom}` : `${table.capacity}P`}
               </span>
             </div>
-            <div className="w-14 h-1.5 rounded-b-md bg-stone-400/80 border border-stone-500/60 mt-0.5" />
+            <div className="w-11 h-1.5 rounded-b-sm bg-cyan-700/80 border border-cyan-800 mt-0.5" />
           </div>
         )}
 
-        {/* 5. Bar Seat / Stool (Single or High-Top 2-Pax) */}
+        {/* 5. Bar Seat / Stool */}
         {shape === 'bar_seat' && (
           <div className="relative flex items-center justify-center p-0.5">
-            <div className="w-9 h-9 rounded-full border-2 flex flex-col items-center justify-center transition-all shadow-xs bg-white border-amber-600/60 text-amber-950 hover:bg-amber-50">
-              <span className="font-mono-custom font-bold text-[9px] leading-none">
+            <div className="w-8 h-8 rounded-full border flex flex-col items-center justify-center transition-all shadow-2xs bg-white border-amber-600/60 text-amber-950 hover:bg-amber-50">
+              <span className="font-mono-custom font-bold text-[8.5px] leading-none">
                 {table.tableNumber}
               </span>
               <span className="text-[7px] font-mono-custom text-muted-foreground mt-0.5">
@@ -237,45 +224,49 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
           </div>
         )}
 
-        {/* 6. Standard Square / 4-Top Dining Table */}
+        {/* 6. Standard Square / 4-Top or 2-Top Dining Table */}
         {shape === 'square' && (
           <div className="relative flex items-center justify-center p-1">
-            {/* 4 Chairs */}
-            <div className={`absolute -top-1 w-3 h-2 rounded-t-sm ${colors.chair} border shadow-xs`} />
-            <div className={`absolute -bottom-1 w-3 h-2 rounded-b-sm ${colors.chair} border shadow-xs`} />
-            <div className={`absolute -left-1 w-2 h-3 rounded-l-sm ${colors.chair} border shadow-xs`} />
-            <div className={`absolute -right-1 w-2 h-3 rounded-r-sm ${colors.chair} border shadow-xs`} />
+            {/* Chairs: 4 chairs for 4-tops, 2 chairs for 2-tops */}
+            <div className={`absolute -top-1.5 w-3.5 h-1.5 rounded-t-sm ${colors.chair} border shadow-2xs`} />
+            <div className={`absolute -bottom-1.5 w-3.5 h-1.5 rounded-b-sm ${colors.chair} border shadow-2xs`} />
+            {table.capacity > 2 && (
+              <>
+                <div className={`absolute -left-1.5 w-1.5 h-3.5 rounded-l-sm ${colors.chair} border shadow-2xs`} />
+                <div className={`absolute -right-1.5 w-1.5 h-3.5 rounded-r-sm ${colors.chair} border shadow-2xs`} />
+              </>
+            )}
 
-            <div className={`w-12 h-12 rounded-xl border flex flex-col items-center justify-center transition-all ${colors.bg} ${colors.border}`}>
-              <span className="font-mono-custom font-extrabold text-[11px] leading-none">
+            <div className={`w-9.5 h-9.5 rounded-md border flex flex-col items-center justify-center transition-all ${colors.bg} ${colors.border}`}>
+              <span className="font-mono-custom font-black text-[10px] leading-none">
                 {table.tableNumber}
               </span>
-              <span className="text-[8px] font-mono-custom opacity-85 mt-0.5">
-                {table.status === 'occupied' ? `RM ${table.occupiedByRoom}` : `${table.capacity}P`}
+              <span className="text-[7.5px] font-mono-custom opacity-85 mt-0.5">
+                {table.status === 'occupied' ? `R${table.occupiedByRoom}` : `${table.capacity}P`}
               </span>
             </div>
           </div>
         )}
 
-        {/* 7. Long Rectangle Table (4 to 6 Pax) */}
+        {/* 7. Long Rectangle Table */}
         {shape === 'rectangle' && (
           <div className="relative flex items-center justify-center p-1">
             {/* Top & Bottom Chairs */}
-            <div className="absolute -top-1 flex gap-1.5">
-              <div className={`w-2.5 h-1.5 rounded-t-sm ${colors.chair} border shadow-xs`} />
-              <div className={`w-2.5 h-1.5 rounded-t-sm ${colors.chair} border shadow-xs`} />
+            <div className="absolute -top-1 flex gap-1">
+              <div className={`w-2.5 h-1.5 rounded-t-sm ${colors.chair} border shadow-2xs`} />
+              <div className={`w-2.5 h-1.5 rounded-t-sm ${colors.chair} border shadow-2xs`} />
             </div>
-            <div className="absolute -bottom-1 flex gap-1.5">
-              <div className={`w-2.5 h-1.5 rounded-b-sm ${colors.chair} border shadow-xs`} />
-              <div className={`w-2.5 h-1.5 rounded-b-sm ${colors.chair} border shadow-xs`} />
+            <div className="absolute -bottom-1 flex gap-1">
+              <div className={`w-2.5 h-1.5 rounded-b-sm ${colors.chair} border shadow-2xs`} />
+              <div className={`w-2.5 h-1.5 rounded-b-sm ${colors.chair} border shadow-2xs`} />
             </div>
 
-            <div className={`w-15 h-10 rounded-xl border flex flex-col items-center justify-center transition-all ${colors.bg} ${colors.border}`}>
-              <span className="font-mono-custom font-extrabold text-[11px] leading-none">
+            <div className={`w-13 h-8.5 rounded-md border flex flex-col items-center justify-center transition-all ${colors.bg} ${colors.border}`}>
+              <span className="font-mono-custom font-black text-[10px] leading-none">
                 {table.tableNumber}
               </span>
-              <span className="text-[8px] font-mono-custom opacity-85 mt-0.5">
-                {table.status === 'occupied' ? `RM ${table.occupiedByRoom}` : `${table.capacity} Pax`}
+              <span className="text-[7.5px] font-mono-custom opacity-85 mt-0.5">
+                {table.status === 'occupied' ? `R${table.occupiedByRoom}` : `${table.capacity}P`}
               </span>
             </div>
           </div>
@@ -345,14 +336,14 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
         </div>
 
         {/* Blueprint Map Surface */}
-        <div className="relative w-full overflow-auto p-4 md:p-8 flex justify-center items-center min-h-[580px] bg-[#F7F5F0]">
+        <div className="relative w-full overflow-auto p-4 md:p-8 flex justify-center items-center min-h-[520px] bg-[#F7F5F0]">
           <div 
             style={{ 
               transform: `scale(${zoomLevel})`,
               transformOrigin: 'center center',
               transition: 'transform 0.2s ease-out'
             }}
-            className="relative w-[1000px] h-[640px] bg-white rounded-2xl border-2 border-stone-400/70 shadow-xl overflow-hidden shrink-0 select-none"
+            className="relative w-[1100px] h-[460px] bg-white rounded-2xl border-2 border-stone-400/80 shadow-xl overflow-hidden shrink-0 select-none"
           >
             {/* Grid Pattern Background */}
             <div className="absolute inset-0 bg-[radial-gradient(#0A162B_0.75px,transparent_0.75px)] [background-size:20px_20px] opacity-10 pointer-events-none" />
@@ -362,58 +353,90 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
             {/* ------------------------------------------------------------- */}
             {!isIbis && (
               <>
-                {/* 1. Gourmet Bar Enclosed Room (Top-Right Area) */}
-                <div className="absolute top-[4%] left-[48%] right-[4%] h-[28%] rounded-2xl bg-amber-50/70 border-2 border-dashed border-amber-400/80 p-3 pointer-events-none z-10 flex flex-col justify-between">
-                  <div className="flex items-center justify-between">
-                    <span className="flex items-center gap-1.5 text-[10px] font-mono-custom font-extrabold text-amber-900 uppercase tracking-wider bg-amber-200/90 px-2 py-0.5 rounded-md">
-                      <Wine size={12} className="text-amber-800" /> Gourmet Bar (Enclosed Room)
-                    </span>
-                    <span className="text-[9px] font-mono-custom text-amber-800 font-bold">
-                      Diamond 4-Tops & Bar
-                    </span>
+                {/* 1. Hostess Desk Room & Entrance (Left Wing) */}
+                <div className="absolute top-[24%] left-[3%] w-[15%] h-[56%] rounded-xl border-2 border-stone-800 bg-stone-100/60 p-2 pointer-events-none z-10 flex flex-col items-center justify-between shadow-xs">
+                  <div className="w-12 h-8 bg-stone-200 border-2 border-stone-600 rounded flex items-center justify-center shadow-xs">
+                    <span className="text-[7.5px] font-mono-custom font-black text-stone-800">DESK</span>
                   </div>
-                </div>
-
-                {/* 2. Main Dining Room Zone Outline */}
-                <div className="absolute top-[34%] left-[18%] right-[8%] bottom-[4%] rounded-2xl border border-stone-300/80 bg-stone-50/30 p-2.5 pointer-events-none z-0 flex items-start justify-between">
-                  <span className="text-[9px] font-mono-custom font-extrabold text-stone-500 uppercase tracking-widest">
-                    Food Exchange Main Dining Room
+                  <span className="text-[8px] font-mono-custom font-black tracking-wider text-stone-900 uppercase bg-white/95 px-2 py-0.5 rounded border border-stone-300">
+                    HOSTESS DESK
                   </span>
                 </div>
 
-                {/* 3. Render Static Novotel Floor Features */}
-                {NOVOTEL_FLOOR_FEATURES.map((feat) => {
-                  const isRound = feat.shape === 'round';
-                  let bgStyle = 'bg-stone-100/80 border-stone-400 text-stone-700';
-                  if (feat.kind === 'back-of-house') {
-                    bgStyle = 'bg-slate-200/80 border-slate-400 text-slate-700';
-                  } else if (feat.kind === 'buffet' || feat.kind === 'island') {
-                    bgStyle = 'bg-amber-100/90 border-amber-500 text-amber-950 font-extrabold';
-                  } else if (feat.kind === 'bar-counter') {
-                    bgStyle = 'bg-orange-200/90 border-orange-500 text-orange-950';
-                  } else if (feat.kind === 'entrance') {
-                    bgStyle = 'bg-emerald-100/90 border-emerald-500 text-emerald-950';
-                  }
+                {/* Vertical COFFEE STAND dividing wall */}
+                <div className="absolute top-[24%] left-[18%] w-[2%] h-[56%] rounded-r-sm border-y-2 border-r-2 border-amber-600 bg-amber-100/90 flex flex-col items-center justify-center pointer-events-none z-15 select-none py-1">
+                  <span className="text-[6.5px] font-mono-custom font-black text-amber-950 uppercase tracking-widest [writing-mode:vertical-lr] rotate-180 text-center">
+                    COFFEE STAND
+                  </span>
+                </div>
 
-                  return (
-                    <div
-                      key={feat.id}
-                      style={{
-                        left: `${feat.x}%`,
-                        top: `${feat.y}%`,
-                        width: `${feat.w}%`,
-                        height: `${feat.h}%`,
-                      }}
-                      className={`absolute border-2 border-dashed flex flex-col items-center justify-center p-1 pointer-events-none z-10 select-none ${
-                        isRound ? 'rounded-full' : 'rounded-xl'
-                      } ${bgStyle}`}
-                    >
-                      <span className="text-[8px] font-mono-custom font-bold uppercase tracking-wider text-center leading-tight">
-                        {feat.label}
-                      </span>
-                    </div>
-                  );
-                })}
+                {/* Top-Left Outdoor Terrace & Stairs */}
+                <div className="absolute top-[6%] left-[3%] w-[15%] h-[16%] rounded-lg border border-dashed border-emerald-500 bg-emerald-50/50 p-1.5 pointer-events-none z-10 flex items-center justify-between">
+                  <div className="flex flex-col gap-0.5 w-10 border-r border-stone-300 pr-1">
+                    <div className="h-1 bg-stone-300 rounded-full" />
+                    <div className="h-1 bg-stone-300 rounded-full" />
+                    <div className="h-1 bg-stone-300 rounded-full" />
+                    <span className="text-[6px] font-mono-custom text-stone-500 text-center">STAIRS</span>
+                  </div>
+                  <span className="text-[7.5px] font-mono-custom font-black text-emerald-900 uppercase">
+                    Terrace
+                  </span>
+                </div>
+
+                {/* 2. Gourmet Bar Enclosed Room (Top Enclosed Box) */}
+                <div className="absolute top-[6%] left-[36%] w-[36%] h-[24%] rounded-xl bg-cyan-50/40 border-2 border-stone-800 p-2 pointer-events-none z-10 flex flex-col justify-between shadow-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="flex items-center gap-1 text-[8.5px] font-mono-custom font-black text-stone-900 uppercase tracking-wider bg-white/95 px-2 py-0.5 rounded border border-stone-300">
+                      <Wine size={10} className="text-cyan-800" /> Gourmet Bar (Enclosed)
+                    </span>
+                    <span className="text-[7.5px] font-mono-custom font-bold text-stone-600">
+                      BAR4-BAR6 / BAR1-BAR3
+                    </span>
+                  </div>
+                  {/* Bar Counter inside Gourmet Bar */}
+                  <div className="self-end w-22 h-4 rounded bg-cyan-200/90 border border-cyan-500 flex items-center justify-center">
+                    <span className="text-[7px] font-mono-custom font-bold text-cyan-950">BAR COUNTER</span>
+                  </div>
+                </div>
+
+                {/* 3. Main Dining Room Zone & Buffet Stations */}
+                {/* Top Buffet Counters (Right of C5) */}
+                <div className="absolute top-[33.5%] left-[54%] w-[22%] h-[5%] rounded bg-cyan-100/90 border-2 border-cyan-500 flex items-center justify-between px-1 pointer-events-none z-10">
+                  <div className="w-3.5 h-3.5 rounded-sm bg-cyan-200 border border-cyan-400" />
+                  <div className="w-3.5 h-3.5 rounded-sm bg-cyan-200 border border-cyan-400" />
+                  <span className="text-[7px] font-mono-custom font-black text-cyan-950 uppercase tracking-wider">
+                    BUFFET (HOT LINE)
+                  </span>
+                  <div className="w-3.5 h-3.5 rounded-sm bg-cyan-200 border border-cyan-400" />
+                  <div className="w-3.5 h-3.5 rounded-sm bg-cyan-200 border border-cyan-400" />
+                </div>
+
+                {/* Central Buffet Island (3 connected elements: oval - circle - oval) */}
+                <div className="absolute top-[48%] left-[57%] w-[16%] h-[12%] rounded-full bg-cyan-100/90 border-2 border-cyan-500 flex items-center justify-around px-2 pointer-events-none z-10 shadow-xs">
+                  <div className="w-5 h-5 rounded-full bg-cyan-300 border border-cyan-600" />
+                  <span className="text-[7px] font-mono-custom font-black text-cyan-950 uppercase tracking-wider text-center">
+                    BUFFET<br/>ISLAND
+                  </span>
+                  <div className="w-5 h-5 rounded-full bg-cyan-300 border border-cyan-600" />
+                </div>
+
+                {/* Bottom Buffet Counter (Right of A6) */}
+                <div className="absolute top-[71.5%] left-[54%] w-[22%] h-[5%] rounded bg-cyan-100/90 border-2 border-cyan-500 flex items-center justify-between px-1 pointer-events-none z-10">
+                  <div className="w-3.5 h-3.5 rounded-sm bg-cyan-200 border border-cyan-400" />
+                  <div className="w-3.5 h-3.5 rounded-sm bg-cyan-200 border border-cyan-400" />
+                  <span className="text-[7px] font-mono-custom font-black text-cyan-950 uppercase tracking-wider">
+                    BUFFET (COLD / DESSERT)
+                  </span>
+                  <div className="w-3.5 h-3.5 rounded-sm bg-cyan-200 border border-cyan-400" />
+                  <div className="w-3.5 h-3.5 rounded-sm bg-cyan-200 border border-cyan-400" />
+                </div>
+
+                {/* Right Wall Window Banquette Seating Strip */}
+                <div className="absolute top-[20%] right-[4%] bottom-[20%] w-[2.5%] rounded-lg bg-cyan-200/80 border-2 border-cyan-600 flex flex-col items-center justify-center pointer-events-none z-10">
+                  <span className="text-[6.5px] font-mono-custom font-black text-cyan-950 uppercase [writing-mode:vertical-lr] rotate-180">
+                    WINDOW BANQUETTE
+                  </span>
+                </div>
               </>
             )}
 
@@ -422,67 +445,88 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
             {/* ------------------------------------------------------------- */}
             {isIbis && (
               <>
-                {/* 1. Outdoor Smoking Terrace Region (Bottom Shaded Area) */}
-                <div className="absolute top-[86%] left-[36%] w-[30%] h-[12%] rounded-2xl bg-cyan-50/90 border-2 border-cyan-400/90 p-2 pointer-events-none z-10 shadow-xs flex flex-col justify-between">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 bg-cyan-200/90 px-2 py-0.5 rounded-md border border-cyan-300">
-                      <Cigarette size={12} className="text-cyan-900" />
-                      <span className="text-[9px] font-mono-custom font-extrabold text-cyan-950 uppercase tracking-wider">
-                        Smoking Terrace
-                      </span>
+                {/* 1. Bar Prep / Kitchen Pass (Left Wing Top) */}
+                <div className="absolute top-[6%] left-[18%] w-[14%] h-[22%] rounded-xl border-2 border-stone-800 bg-stone-100/70 p-2 pointer-events-none z-10 flex flex-col justify-between">
+                  <div className="w-full h-4 rounded bg-cyan-200/90 border border-cyan-500 flex items-center justify-center">
+                    <span className="text-[6.5px] font-mono-custom font-bold text-cyan-950">BAR & PASS</span>
+                  </div>
+                  <span className="text-[7px] font-mono-custom font-extrabold text-stone-700 uppercase text-center">
+                    Kitchen / Prep
+                  </span>
+                </div>
+
+                {/* Bottom-left Entrance Corridor */}
+                <div className="absolute top-[32%] left-[6%] w-[26%] h-[46%] rounded-xl border border-dashed border-stone-400 bg-stone-50/40 p-2 pointer-events-none z-0 flex flex-col justify-between">
+                  <span className="text-[7px] font-mono-custom text-stone-500 font-bold uppercase">
+                    Entrance Foyer / Corridor
+                  </span>
+                </div>
+
+                {/* 2. Hostess Desk at Entrance Threshold */}
+                <div className="absolute top-[24%] left-[38%] w-[8%] h-[5%] rounded-md bg-stone-100 border-2 border-stone-800 flex items-center justify-center pointer-events-none z-15 shadow-xs">
+                  <span className="text-[6.5px] font-mono-custom font-black text-stone-900 uppercase tracking-wider">
+                    HOSTESS
+                  </span>
+                </div>
+
+                {/* 3. Top Buffet Counters & Front Desk */}
+                <div className="absolute top-[24%] left-[48%] w-[16%] h-[5%] rounded bg-cyan-100/90 border-2 border-cyan-500 flex items-center justify-between px-1 pointer-events-none z-10">
+                  <div className="w-3 h-3 rounded-sm bg-cyan-200 border border-cyan-400" />
+                  <span className="text-[6.5px] font-mono-custom font-black text-cyan-950 uppercase tracking-wider">
+                    BUFFET COUNTER
+                  </span>
+                  <div className="w-3 h-3 rounded-sm bg-cyan-200 border border-cyan-400" />
+                </div>
+
+                <div className="absolute top-[24%] left-[68%] w-[8%] h-[5%] rounded-md bg-stone-100 border-2 border-stone-800 flex items-center justify-center pointer-events-none z-15 shadow-xs">
+                  <span className="text-[6.5px] font-mono-custom font-black text-stone-900 uppercase tracking-wider">
+                    FRONT DESK
+                  </span>
+                </div>
+
+                {/* 4. Center Dining Grid Left & Right Vertical Dividers */}
+                <div className="absolute top-[40%] left-[44%] w-[1.2%] h-[24%] rounded bg-cyan-200/90 border border-cyan-500 flex items-center justify-center pointer-events-none z-10" />
+                <div className="absolute top-[40%] left-[67%] w-[1.2%] h-[24%] rounded bg-cyan-200/90 border border-cyan-500 flex items-center justify-center pointer-events-none z-10" />
+
+                {/* 5. Left Buffet Island (Circle + Counter) */}
+                <div className="absolute top-[52%] left-[38%] w-[5%] h-[10%] rounded-full bg-cyan-100/90 border-2 border-cyan-500 flex items-center justify-center pointer-events-none z-10">
+                  <span className="text-[6px] font-mono-custom font-bold text-cyan-950 text-center leading-none">
+                    BUFFET
+                  </span>
+                </div>
+
+                {/* 6. Outdoor Smoking Terrace Region (Bottom Cyan Shaded Area with Cigarette Icon) */}
+                <div className="absolute top-[78%] left-[32%] w-[24%] h-[18%] rounded-xl bg-cyan-100/90 border-2 border-cyan-500 p-1.5 pointer-events-none z-10 shadow-md flex flex-col justify-between">
+                  <div className="flex items-center justify-between border-b border-cyan-300 pb-0.5">
+                    <div className="flex items-center gap-1 bg-cyan-600 text-white px-1 py-0.2 rounded text-[7px] font-mono-custom font-extrabold uppercase">
+                      <Cigarette size={9} />
+                      <span>Smoking Area</span>
                     </div>
                   </div>
+                  {/* Center Cigarette Icon Mark */}
+                  <div className="self-center flex items-center justify-center w-6 h-6 rounded-full bg-cyan-200/90 border border-cyan-400 text-cyan-900">
+                    <Cigarette size={13} />
+                  </div>
+                  <span className="text-[6.5px] font-mono-custom font-bold text-cyan-800 text-center">
+                    Outdoor Smoking (SMK-1 ~ SMK-4)
+                  </span>
                 </div>
 
-                {/* 2. Outdoor Terrace Region (Outside Right Wall) */}
-                <div className="absolute top-[34%] left-[95%] right-[0.5%] h-[20%] rounded-xl bg-emerald-50/80 border-2 border-dashed border-emerald-400 p-1 pointer-events-none z-10 flex flex-col items-center justify-center">
-                  <span className="text-[7px] font-mono-custom font-extrabold text-emerald-900 uppercase writing-mode-vertical">
+                {/* 7. Right Wall Banquette Strip & Exterior Terrace */}
+                <div className="absolute top-[18%] left-[88%] bottom-[26%] w-[2%] rounded-lg bg-cyan-200/80 border-2 border-cyan-600 flex flex-col items-center justify-center pointer-events-none z-10">
+                  <span className="text-[6px] font-mono-custom font-black text-cyan-950 uppercase [writing-mode:vertical-lr] rotate-180">
+                    BANQUETTE
+                  </span>
+                </div>
+
+                <div className="absolute top-[34%] left-[92%] w-[6%] h-[32%] rounded-xl bg-emerald-50/70 border-2 border-dashed border-emerald-400 p-1 pointer-events-none z-10 flex flex-col items-center justify-between">
+                  <span className="text-[7px] font-mono-custom font-extrabold text-emerald-900 uppercase">
                     Terrace
                   </span>
-                </div>
-
-                {/* 3. Main Dining Hall Area */}
-                <div className="absolute top-[32%] left-[24%] right-[6%] bottom-[16%] rounded-2xl border border-stone-300 bg-stone-50/30 p-2 pointer-events-none z-0 flex items-start justify-between">
-                  <span className="text-[9px] font-mono-custom font-bold text-stone-500 uppercase tracking-wider">
-                    Delhi Street Main Dining Hall
+                  <span className="text-[6px] font-mono-custom font-bold text-emerald-700 uppercase [writing-mode:vertical-lr] rotate-180">
+                    Outdoor
                   </span>
                 </div>
-
-                {/* 4. Render Static ibis Floor Features */}
-                {IBIS_FLOOR_FEATURES.map((feat) => {
-                  const isRound = feat.shape === 'round';
-                  let bgStyle = 'bg-stone-100/80 border-stone-400 text-stone-700';
-                  if (feat.kind === 'back-of-house') {
-                    bgStyle = 'bg-slate-200/80 border-slate-400 text-slate-700';
-                  } else if (feat.kind === 'buffet' || feat.kind === 'island') {
-                    bgStyle = 'bg-amber-100/90 border-amber-500 text-amber-950 font-extrabold';
-                  } else if (feat.kind === 'bar-counter') {
-                    bgStyle = 'bg-amber-200/90 border-amber-600 text-amber-950';
-                  } else if (feat.kind === 'entrance') {
-                    bgStyle = 'bg-emerald-100/90 border-emerald-500 text-emerald-950';
-                  } else if (feat.kind === 'host-desk') {
-                    bgStyle = 'bg-blue-200/90 border-blue-600 text-blue-950';
-                  }
-
-                  return (
-                    <div
-                      key={feat.id}
-                      style={{
-                        left: `${feat.x}%`,
-                        top: `${feat.y}%`,
-                        width: `${feat.w}%`,
-                        height: `${feat.h}%`,
-                      }}
-                      className={`absolute border-2 border-dashed flex flex-col items-center justify-center p-1 pointer-events-none z-10 select-none ${
-                        isRound ? 'rounded-full' : 'rounded-xl'
-                      } ${bgStyle}`}
-                    >
-                      <span className="text-[8px] font-mono-custom font-bold uppercase tracking-wider text-center leading-tight">
-                        {feat.label}
-                      </span>
-                    </div>
-                  );
-                })}
               </>
             )}
 
