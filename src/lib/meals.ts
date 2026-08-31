@@ -9,6 +9,10 @@ export const OVER_CAPACITY_REASONS = {
   OTHER: 'OTHER',
 } as const;
 
+export function freeChildAge(hotelId: string): number {
+  return hotelId.toLowerCase().includes('ibis') ? 12 : 16;
+}
+
 export function hasMealEntitlement(mealPlan: string | undefined | null, service: MealServiceType = 'breakfast'): boolean {
   if (!mealPlan) return false;
   const p = mealPlan.toUpperCase().trim();
@@ -32,7 +36,7 @@ export function hasMealEntitlement(mealPlan: string | undefined | null, service:
       p.includes('MBREAK') ||
       p.includes('BFCOMP')
     ) {
-      if (p.includes('RO') && !p.includes('BB') && !p.includes('BF') && !p.includes('BKF')) {
+      if (p.includes('RO') && !p.includes('BB') && !p.includes('BF') && !p.includes('BKF') && !p.includes('RB') && !p.includes('BREAKFAST')) {
         return false;
       }
       return true;
@@ -42,13 +46,11 @@ export function hasMealEntitlement(mealPlan: string | undefined | null, service:
 
   if (service === 'dinner') {
     return (
+      p.includes('HALF BOARD') ||
+      p.includes('FULL BOARD') ||
       p.includes('DINNER') ||
       p.includes('DINNVT') ||
-      p.includes('HALF BOARD') ||
-      p.includes('HB') ||
-      p.includes('FULL BOARD') ||
-      p.includes('FB') ||
-      p.includes('DIN')
+      /(^|[^A-Z0-9])(HB|FB)([^A-Z0-9]|$)/.test(p)
     );
   }
 
@@ -56,7 +58,7 @@ export function hasMealEntitlement(mealPlan: string | undefined | null, service:
     return (
       p.includes('LUNCH') ||
       p.includes('FULL BOARD') ||
-      p.includes('FB') ||
+      /(^|[^A-Z0-9])FB([^A-Z0-9]|$)/.test(p) ||
       p.includes('CONF') ||
       p.includes('CNF') ||
       p.includes('MBUFF')
@@ -68,7 +70,7 @@ export function hasMealEntitlement(mealPlan: string | undefined | null, service:
 
 export function entitledPax(guest: Guest, service: MealServiceType = 'breakfast'): number {
   if (!hasMealEntitlement(guest.mealPlan, service)) return 0;
-  return (guest.adults || 1) + (guest.children || 0);
+  return (guest.adults || 0) + (guest.children || 0);
 }
 
 export function canonicalPlan(plan: string | undefined | null): string {
@@ -86,14 +88,14 @@ export function canonicalPlan(plan: string | undefined | null): string {
   return plan;
 }
 
-export function overCapacityLabel(code: string): string {
+export function overCapacityLabel(code: string, hotelId: string = 'novotel'): string {
   switch (code) {
     case OVER_CAPACITY_REASONS.STAFF_APPROVED:
       return 'Staff Approved';
     case OVER_CAPACITY_REASONS.ROOM_CHARGE:
       return 'Room Charge / Paid Walk-In';
     case OVER_CAPACITY_REASONS.CHILD_COMPLIMENTARY:
-      return 'Child Under Age / Free';
+      return `Child complimentary (under ${freeChildAge(hotelId)} years)`;
     case OVER_CAPACITY_REASONS.VIP_BENEFIT:
       return 'VIP / Loyalty Benefit';
     case OVER_CAPACITY_REASONS.CONFERENCE_EXTRA:
@@ -105,11 +107,11 @@ export function overCapacityLabel(code: string): string {
   }
 }
 
-export function availableOverCapacityReasons(): Array<{ code: string; label: string }> {
+export function availableOverCapacityReasons(hotelId: string = 'novotel'): Array<{ code: string; label: string }> {
   return [
     { code: OVER_CAPACITY_REASONS.STAFF_APPROVED, label: 'Manager / Staff Approved' },
     { code: OVER_CAPACITY_REASONS.ROOM_CHARGE, label: 'Room Charge (Post to Folio)' },
-    { code: OVER_CAPACITY_REASONS.CHILD_COMPLIMENTARY, label: 'Child Complimentary (< 4 yrs)' },
+    { code: OVER_CAPACITY_REASONS.CHILD_COMPLIMENTARY, label: `Child complimentary (under ${freeChildAge(hotelId)} years)` },
     { code: OVER_CAPACITY_REASONS.VIP_BENEFIT, label: 'ALL Accor Diamond / Platinum Benefit' },
     { code: OVER_CAPACITY_REASONS.CONFERENCE_EXTRA, label: 'Conference / Event Extra Cover' },
     { code: OVER_CAPACITY_REASONS.OTHER, label: 'Other Specified Reason' },

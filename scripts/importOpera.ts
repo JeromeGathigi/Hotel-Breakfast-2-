@@ -54,33 +54,51 @@ async function resolveServiceAccount(): Promise<Record<string, unknown> | null> 
   return null;
 }
 
+async function resolveFirestoreDatabaseId(): Promise<string> {
+  const envDbId = process.env.FIRESTORE_DATABASE_ID;
+  if (envDbId) return envDbId;
+
+  const configPath = path.resolve(process.cwd(), 'firebase-applet-config.json');
+  if (await fileExists(configPath)) {
+    try {
+      const configText = await fs.readFile(configPath, 'utf8');
+      const config = JSON.parse(configText);
+      if (config.firestoreDatabaseId) {
+        return config.firestoreDatabaseId;
+      }
+    } catch {
+      // continue to throw
+    }
+  }
+
+  throw new Error('Missing Firestore database ID. Set FIRESTORE_DATABASE_ID or check firebase-applet-config.json.');
+}
+
 let cachedDb: ReturnType<typeof getFirestore> | null = null;
 
 async function getDb() {
   if (cachedDb) return cachedDb;
 
+  const databaseId = await resolveFirestoreDatabaseId();
   const serviceAccount = await resolveServiceAccount();
   const projectId = process.env.VITE_FIREBASE_PROJECT_ID ?? process.env.FIREBASE_PROJECT_ID;
 
+  let app;
   if (serviceAccount) {
-    initializeApp({
+    app = initializeApp({
       credential: cert(serviceAccount as any),
       projectId: (serviceAccount as any).project_id || projectId,
     });
-    cachedDb = getFirestore();
-    return cachedDb;
-  }
-
-  if (!projectId) {
+  } else if (projectId) {
+    app = initializeApp({
+      projectId,
+      credential: applicationDefault(),
+    });
+  } else {
     throw new Error('Missing Firebase configuration. Set VITE_FIREBASE_PROJECT_ID and either a service account or ADC credentials.');
   }
 
-  initializeApp({
-    projectId,
-    credential: applicationDefault(),
-  });
-
-  cachedDb = getFirestore();
+  cachedDb = getFirestore(app, databaseId);
   return cachedDb;
 }
 
@@ -126,39 +144,72 @@ async function uniqueArchiveTarget(target: string): Promise<string> {
 
 export async function importFile(filePath: string, hotelId: string = HOTEL_ID) {
   const rawText = await fs.readFile(filePath, 'utf8');
-  const parsed = parseInHouseReport(rawText);
+  const parsed = parseInHouseReport(rawText, hotelId);
 
   if (parsed.rooms.length === 0) {
     throw new Error(`No rows parsed from ${filePath}. Check that the file is a valid Opera Guest In-house export.`);
   }
 
   const db = await getDb();
-  const batch = db.batch();
   const guestsCollection = db.collection('hotels').doc(hotelId).collection('guests');
   const metadataRef = db.collection('hotels').doc(hotelId).collection('metadata').doc('reports');
 
-  const existing = await guestsCollection.listDocuments();
-  for (const guestDoc of existing) {
-    batch.delete(guestDoc);
-  }
+  const BATCH_SIZE = 400;
+  const newRoomIds = new Set<string>();
 
-  parsed.rooms.forEach((room) => {
-    const guest = buildGuestRecord(room);
-    batch.set(guestsCollection.doc(guest.roomNumber), {
+  // 1. Perform SETS first in chunks of <= 400
+  let setBatch = db.batch();
+  let opCount = 0;
+
+  for (const room of parsed.rooms) {
+    const guest = buildGuestRecord(room, hotelId);
+    newRoomIds.add(guest.roomNumber);
+    setBatch.set(guestsCollection.doc(guest.roomNumber), {
       ...guest,
       lastUpdated: new Date(),
       vipStatus: guest.vipStatus ?? null,
       issueType: guest.issueType ?? null,
     });
-  });
+    opCount++;
 
-  batch.set(metadataRef, {
+    if (opCount >= BATCH_SIZE) {
+      await setBatch.commit();
+      setBatch = db.batch();
+      opCount = 0;
+    }
+  }
+
+  if (opCount > 0) {
+    await setBatch.commit();
+  }
+
+  // 2. Perform DELETES of old rooms no longer in the active export
+  const existingDocs = await guestsCollection.listDocuments();
+  let deleteBatch = db.batch();
+  opCount = 0;
+
+  for (const docRef of existingDocs) {
+    if (!newRoomIds.has(docRef.id)) {
+      deleteBatch.delete(docRef);
+      opCount++;
+      if (opCount >= BATCH_SIZE) {
+        await deleteBatch.commit();
+        deleteBatch = db.batch();
+        opCount = 0;
+      }
+    }
+  }
+
+  if (opCount > 0) {
+    await deleteBatch.commit();
+  }
+
+  // 3. Set metadata
+  await metadataRef.set({
     date: businessDate(),
     lastUploaded: new Date(),
     uploadedBy: 'opera-automation',
   });
-
-  await batch.commit();
 
   log(`Imported ${parsed.rooms.length} rooms into hotel ${hotelId} from ${path.basename(filePath)}.`);
   return parsed;

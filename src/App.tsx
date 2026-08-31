@@ -237,7 +237,7 @@ export function App() {
                 }`}
               >
                 <Upload size={15} className="text-black shrink-0" />
-                <span className="text-black">Opera Report Sync</span>
+                <span className="text-black">Opera Sync & Historical Hub</span>
               </button>
             )}
 

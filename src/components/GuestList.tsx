@@ -9,6 +9,7 @@ import { VIP_LEVELS } from '../constants';
 import { businessDate } from '../lib/businessDate';
 import { canonicalPlan } from '../lib/meals';
 import { OperaAuditModal } from './OperaAuditModal';
+import { TableRowSkeleton } from './Skeleton';
 import { 
   Search, 
   Download, 
@@ -25,11 +26,13 @@ interface GuestListProps {
 export const GuestList: React.FC<GuestListProps> = ({ hotelId }) => {
   const [guests, setGuests] = useState<Guest[]>([]);
   const [checkIns, setCheckIns] = useState<Record<string, CheckIn>>({});
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'attended' | 'pending' | 'vip'>('all');
   const [selectedGuestForAudit, setSelectedGuestForAudit] = useState<Guest | null>(null);
 
   useEffect(() => {
+    setLoading(true);
     const today = businessDate();
 
     const guestsRef = collection(db, 'hotels', hotelId, 'guests');
@@ -37,6 +40,7 @@ export const GuestList: React.FC<GuestListProps> = ({ hotelId }) => {
       const list = snap.docs.map((d) => d.data() as Guest);
       list.sort((a, b) => a.roomNumber.localeCompare(b.roomNumber, undefined, { numeric: true }));
       setGuests(list);
+      setLoading(false);
     });
 
     const checkinsRef = collection(db, 'hotels', hotelId, 'checkins', today, 'rooms');
@@ -73,33 +77,41 @@ export const GuestList: React.FC<GuestListProps> = ({ hotelId }) => {
   });
 
   const exportCsv = () => {
+    const escapeCsvField = (val: unknown): string => {
+      if (val === null || val === undefined) return '""';
+      const str = String(val).replace(/"/g, '""');
+      return `"${str}"`;
+    };
+
     const headers = ['Room', 'Guest Name', 'Accompanying', 'Arrival', 'Departure', 'Meal Plan', 'Adults', 'Children', 'Status', 'Table', 'VIP', 'Company'];
     const rows = filteredGuests.map((g) => {
       const c = checkIns[g.roomNumber];
       return [
-        `"${g.roomNumber}"`,
-        `"${g.guestName}"`,
-        `"${(g.accompanyingGuests || []).join(', ')}"`,
-        `"${g.arrivalDate}"`,
-        `"${g.departureDate}"`,
-        `"${g.mealPlan}"`,
-        g.adults,
-        g.children,
-        c ? `"Checked-In (${c.adultsAte + c.childrenAte} Pax)"` : '"Pending"',
-        c?.tableNumber ? `"${c.tableNumber}"` : '""',
-        `"${g.vipLevel || g.vipStatus || ''}"`,
-        `"${g.companyName || ''}"`,
+        escapeCsvField(g.roomNumber),
+        escapeCsvField(g.guestName),
+        escapeCsvField((g.accompanyingGuests || []).join(', ')),
+        escapeCsvField(g.arrivalDate),
+        escapeCsvField(g.departureDate),
+        escapeCsvField(g.mealPlan),
+        escapeCsvField(g.adults),
+        escapeCsvField(g.children),
+        escapeCsvField(c ? `Checked-In (${c.adultsAte + c.childrenAte} Pax)` : 'Pending'),
+        escapeCsvField(c?.tableNumber || ''),
+        escapeCsvField(g.vipLevel || g.vipStatus || ''),
+        escapeCsvField(g.companyName || ''),
       ];
     });
 
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
+    const csvContent = '\uFEFF' + [headers.map(escapeCsvField).join(','), ...rows.map((r) => r.join(','))].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
+    link.setAttribute('href', url);
     link.setAttribute('download', `${hotelId}-guest-manifest-${businessDate()}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -181,7 +193,20 @@ export const GuestList: React.FC<GuestListProps> = ({ hotelId }) => {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {filteredGuests.map((guest) => {
+              {loading ? (
+                <>
+                  {[1, 2, 3, 4, 5, 6, 7, 8].map((idx) => (
+                    <TableRowSkeleton key={idx} cols={8} />
+                  ))}
+                </>
+              ) : filteredGuests.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="p-8 text-center text-muted-foreground font-sans">
+                    No in-house guests matching your search filter.
+                  </td>
+                </tr>
+              ) : (
+                filteredGuests.map((guest) => {
                 const checkIn = checkIns[guest.roomNumber];
                 const isCheckedIn = Boolean(checkIn);
                 const vip = VIP_LEVELS.find((v) => v.level === guest.vipLevel || v.level === guest.vipStatus);
@@ -249,7 +274,7 @@ export const GuestList: React.FC<GuestListProps> = ({ hotelId }) => {
                     </td>
                   </tr>
                 );
-              })}
+              }))}
             </tbody>
           </table>
         </div>

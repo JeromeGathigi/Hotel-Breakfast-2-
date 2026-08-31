@@ -5,7 +5,8 @@ import {
   collection, 
   getDocs 
 } from '../firebase';
-import { CheckIn, MealForecastItem } from '../types';
+import { CheckIn, MealForecastItem, DailySummary } from '../types';
+import { StatsCardSkeleton, ChartSkeleton } from './Skeleton';
 import { 
   BarChart, 
   Bar, 
@@ -18,7 +19,10 @@ import {
 import { 
   Coffee, 
   Moon, 
-  Utensils 
+  Utensils,
+  Award,
+  Calendar,
+  Clock
 } from 'lucide-react';
 import { bangkokHour, businessDate, businessMonth } from '../lib/businessDate';
 
@@ -34,18 +38,23 @@ interface DailyStats {
   totalActual: number;
   forecastCovers: number;
   roomsAttended: number;
+  captureRate: number;
+  vipPax: number;
+  peakHour?: string;
 }
 
 export const Analytics: React.FC<AnalyticsProps> = ({ hotelId }) => {
   const [selectedMonth, setSelectedMonth] = useState(() => businessMonth());
   const [dailyStats, setDailyStats] = useState<DailyStats[]>([]);
   const [hourlyTraffic, setHourlyTraffic] = useState<{ hour: string; count: number }[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchData();
   }, [hotelId, selectedMonth]);
 
   const fetchData = async () => {
+    setLoading(true);
     try {
       const stats: DailyStats[] = [];
       const trafficMap: Record<string, number> = {};
@@ -58,7 +67,18 @@ export const Analytics: React.FC<AnalyticsProps> = ({ hotelId }) => {
       const daysInMonth = new Date(year, month, 0).getDate();
       const today = businessDate();
 
-      // Fetch all forecasts for this month
+      // 1. Fetch pre-aggregated daily summaries for this hotel
+      const summariesRef = collection(db, 'hotels', hotelId, 'daily_summaries');
+      const summariesSnap = await getDocs(summariesRef);
+      const summariesMap: Record<string, DailySummary> = {};
+      summariesSnap.docs.forEach((d) => {
+        const data = d.data() as DailySummary;
+        if (data.date.startsWith(selectedMonth)) {
+          summariesMap[data.date] = data;
+        }
+      });
+
+      // 2. Fetch forecasts for this month
       const forecastRef = collection(db, 'hotels', hotelId, 'forecasts');
       const forecastSnap = await getDocs(forecastRef);
       const forecastMap: Record<string, number> = {};
@@ -67,51 +87,81 @@ export const Analytics: React.FC<AnalyticsProps> = ({ hotelId }) => {
         forecastMap[data.date] = data.totalCovers || 0;
       });
 
+      // 3. For each day in the month, use summary or calculate from checkins
       for (let day = 1; day <= daysInMonth; day++) {
         const dateStr = `${selectedMonth}-${day.toString().padStart(2, '0')}`;
         if (dateStr > today) continue;
 
-        let bActual = 0, lActual = 0, dActual = 0;
-        let roomsAttended = 0;
+        if (summariesMap[dateStr]) {
+          const sum = summariesMap[dateStr];
+          stats.push({
+            date: dateStr,
+            breakfastActual: sum.totalBreakfastPax,
+            lunchActual: sum.totalLunchPax || 0,
+            dinnerActual: sum.totalDinnerPax || 0,
+            totalActual: sum.totalCovers,
+            forecastCovers: sum.forecastCovers || forecastMap[dateStr] || 60,
+            roomsAttended: sum.roomsAttended || 0,
+            captureRate: sum.captureRatePercent || Math.round((sum.totalBreakfastPax / (sum.forecastCovers || 60)) * 100),
+            vipPax: sum.vipPax || 0,
+            peakHour: sum.peakHour,
+          });
 
-        const checkinsRef = collection(db, 'hotels', hotelId, 'checkins', dateStr, 'rooms');
-        const checkinsSnap = await getDocs(checkinsRef);
-
-        checkinsSnap.docs.forEach((docSnap) => {
-          const data = docSnap.data() as CheckIn;
-          const totalPax = (Number(data.adultsAte) || 0) + (Number(data.childrenAte) || 0) + (Number(data.infantsAte) || 0);
-
-          if (data.mealService === 'dinner') {
-            dActual += totalPax;
-          } else if (data.mealService === 'lunch') {
-            lActual += totalPax;
-          } else {
-            bActual += totalPax;
+          // Aggregate hourly traffic
+          if (sum.hourlyBreakdown) {
+            Object.entries(sum.hourlyBreakdown).forEach(([h, count]) => {
+              if (trafficMap[h] !== undefined) {
+                trafficMap[h] += count;
+              }
+            });
           }
+        } else {
+          // Fallback to raw checkins collection
+          let bActual = 0, lActual = 0, dActual = 0;
+          let roomsAttended = 0;
 
-          roomsAttended += 1;
+          const checkinsRef = collection(db, 'hotels', hotelId, 'checkins', dateStr, 'rooms');
+          const checkinsSnap = await getDocs(checkinsRef);
 
-          if (data.timestamp) {
-            const jsDate = toJsDate(data.timestamp);
-            if (jsDate) {
-              const bangkok = bangkokHour(jsDate);
-              const hourStr = `${bangkok.toString().padStart(2, '0')}:00`;
-              if (trafficMap[hourStr] !== undefined) {
-                trafficMap[hourStr] += totalPax;
+          checkinsSnap.docs.forEach((docSnap) => {
+            const data = docSnap.data() as CheckIn;
+            const totalPax = (Number(data.adultsAte) || 0) + (Number(data.childrenAte) || 0) + (Number(data.infantsAte) || 0);
+
+            if (data.mealService === 'dinner') {
+              dActual += totalPax;
+            } else if (data.mealService === 'lunch') {
+              lActual += totalPax;
+            } else {
+              bActual += totalPax;
+            }
+
+            roomsAttended += 1;
+
+            if (data.timestamp) {
+              const jsDate = toJsDate(data.timestamp);
+              if (jsDate) {
+                const bangkok = bangkokHour(jsDate);
+                const hourStr = `${bangkok.toString().padStart(2, '0')}:00`;
+                if (trafficMap[hourStr] !== undefined) {
+                  trafficMap[hourStr] += totalPax;
+                }
               }
             }
-          }
-        });
+          });
 
-        stats.push({
-          date: dateStr,
-          breakfastActual: bActual,
-          lunchActual: lActual,
-          dinnerActual: dActual,
-          totalActual: bActual + lActual + dActual,
-          forecastCovers: forecastMap[dateStr] || 50,
-          roomsAttended,
-        });
+          const fCovers = forecastMap[dateStr] || 50;
+          stats.push({
+            date: dateStr,
+            breakfastActual: bActual,
+            lunchActual: lActual,
+            dinnerActual: dActual,
+            totalActual: bActual + lActual + dActual,
+            forecastCovers: fCovers,
+            roomsAttended,
+            captureRate: fCovers > 0 ? Math.round((bActual / fCovers) * 100) : 0,
+            vipPax: 0,
+          });
+        }
       }
 
       setDailyStats(stats);
@@ -120,17 +170,23 @@ export const Analytics: React.FC<AnalyticsProps> = ({ hotelId }) => {
           .map(([hour, count]) => ({ hour, count }))
           .filter((h) => {
             const hourNum = parseInt(h.hour.split(':')[0], 10);
-            return (hourNum >= 6 && hourNum <= 11) || (hourNum >= 18 && hourNum <= 22);
+            return (hourNum >= 6 && hourNum <= 12) || (hourNum >= 18 && hourNum <= 22);
           })
       );
     } catch (err) {
       console.warn('Analytics fetch error:', err);
+    } finally {
+      setLoading(false);
     }
   };
 
   const totalBreakfastMonth = dailyStats.reduce((acc, d) => acc + d.breakfastActual, 0);
   const totalDinnerMonth = dailyStats.reduce((acc, d) => acc + d.dinnerActual, 0);
   const totalCoversMonth = dailyStats.reduce((acc, d) => acc + d.totalActual, 0);
+  const totalVipMonth = dailyStats.reduce((acc, d) => acc + d.vipPax, 0);
+  const avgCaptureRate = dailyStats.length > 0 
+    ? Math.round(dailyStats.reduce((acc, d) => acc + (d.captureRate || 0), 0) / dailyStats.length)
+    : 0;
 
   return (
     <div className="space-y-6">
@@ -141,82 +197,209 @@ export const Analytics: React.FC<AnalyticsProps> = ({ hotelId }) => {
             <div className="flex items-center gap-2">
               <span className="label-mono text-accent">Management Analytics</span>
               <span className="text-xs text-muted-foreground">•</span>
-              <span className="font-mono-custom text-xs font-semibold text-muted-foreground">F&B Performance</span>
+              <span className="font-mono-custom text-xs font-semibold text-muted-foreground">Historical & Real-Time Performance</span>
             </div>
             <h2 className="text-2xl font-bold font-display text-foreground mt-1 tracking-tight">
               {hotelId === 'ibis' ? "ibis Delhi Street & Charlie's Corner Analytics" : 'Novotel Food Exchange Analytics'}
             </h2>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Attendance patterns, service peak traffic, and forecast capture rates.
+              Attendance patterns, service peak traffic, forecast capture rates, and historical rollups.
             </p>
           </div>
 
-          <input
-            type="month"
-            value={selectedMonth}
-            onChange={(e) => setSelectedMonth(e.target.value)}
-            className="px-4 py-2 rounded-xl border border-border bg-white text-foreground text-xs font-mono-custom focus:outline-none focus:border-accent shadow-xs"
-          />
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1 bg-[#F2EBE4]/60 p-1 rounded-xl border border-border">
+              {['2023', '2024', '2025', '2026'].map((yr) => {
+                const isSelected = selectedMonth.startsWith(yr);
+                const currentMonthNum = selectedMonth.split('-')[1] || '01';
+                return (
+                  <button
+                    key={yr}
+                    onClick={() => setSelectedMonth(`${yr}-${currentMonthNum}`)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-mono-custom font-bold transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-black text-white shadow-xs'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-[#F2EBE4]'
+                    }`}
+                  >
+                    {yr}
+                  </button>
+                );
+              })}
+            </div>
+
+            <input
+              type="month"
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="px-4 py-2 rounded-xl border border-border bg-white text-foreground text-xs font-mono-custom focus:outline-none focus:border-accent shadow-xs"
+            />
+          </div>
         </div>
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="stat-card-luxury">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="label-mono">Month Total Covers</span>
-            <Utensils size={16} className="text-accent" />
-          </div>
-          <p className="text-3xl font-bold font-display text-foreground mt-2">{totalCoversMonth}</p>
-          <p className="text-xs font-mono-custom text-muted-foreground mt-1">Total guests served</p>
+      {loading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map((idx) => (
+            <StatsCardSkeleton key={idx} />
+          ))}
         </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+          <div className="stat-card-luxury">
+            <div className="flex items-center justify-between text-muted-foreground">
+              <span className="label-mono">Month Total Covers</span>
+              <Utensils size={16} className="text-accent" />
+            </div>
+            <p className="text-3xl font-bold font-display text-foreground mt-2">{totalCoversMonth}</p>
+            <p className="text-xs font-mono-custom text-muted-foreground mt-1">Total guests served</p>
+          </div>
 
-        <div className="stat-card-luxury">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="label-mono text-accent">Breakfast Covers</span>
-            <Coffee size={16} className="text-accent" />
+          <div className="stat-card-luxury">
+            <div className="flex items-center justify-between text-muted-foreground">
+              <span className="label-mono text-accent">Breakfast Covers</span>
+              <Coffee size={16} className="text-accent" />
+            </div>
+            <p className="text-3xl font-bold font-display text-accent mt-2">{totalBreakfastMonth}</p>
+            <p className="text-xs font-mono-custom text-muted-foreground mt-1">Morning buffet attendance</p>
           </div>
-          <p className="text-3xl font-bold font-display text-accent mt-2">{totalBreakfastMonth}</p>
-          <p className="text-xs font-mono-custom text-muted-foreground mt-1">Morning buffet attendance</p>
-        </div>
 
-        <div className="stat-card-luxury">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="label-mono text-indigo-700">Dinner Covers</span>
-            <Moon size={16} className="text-indigo-600" />
+          <div className="stat-card-luxury">
+            <div className="flex items-center justify-between text-muted-foreground">
+              <span className="label-mono text-emerald-700">Avg Capture Rate</span>
+              <span className="text-xs font-mono-custom font-bold text-emerald-600">Actual vs Fcst</span>
+            </div>
+            <p className="text-3xl font-bold font-display text-emerald-800 mt-2">{avgCaptureRate}%</p>
+            <p className="text-xs font-mono-custom text-muted-foreground mt-1">Meal plan entitlement capture</p>
           </div>
-          <p className="text-3xl font-bold font-display text-indigo-800 mt-2">{totalDinnerMonth}</p>
-          <p className="text-xs font-mono-custom text-muted-foreground mt-1">Evening service attendance</p>
+
+          <div className="stat-card-luxury">
+            <div className="flex items-center justify-between text-muted-foreground">
+              <span className="label-mono text-amber-700">VIP Recognition</span>
+              <Award size={16} className="text-amber-600" />
+            </div>
+            <p className="text-3xl font-bold font-display text-amber-800 mt-2">{totalVipMonth}</p>
+            <p className="text-xs font-mono-custom text-muted-foreground mt-1">ALL Diamond/Platinum guests</p>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Hourly Flow Chart */}
-      <div className="bg-white border border-border rounded-2xl p-6 shadow-luxury">
-        <div className="mb-6">
-          <h3 className="text-base font-bold font-display text-foreground">Service Traffic Peak Flow</h3>
-          <p className="text-xs text-muted-foreground">Covers distribution by hour of day (Bangkok UTC+7)</p>
+      {loading ? (
+        <ChartSkeleton height="h-72" />
+      ) : (
+        <div className="bg-white border border-border rounded-2xl p-6 shadow-luxury">
+          <div className="mb-6">
+            <h3 className="text-base font-bold font-display text-foreground">Service Traffic Peak Flow</h3>
+            <p className="text-xs text-muted-foreground">Covers distribution by hour of day (Bangkok UTC+7) — Weekend service extends to 12:00 PM</p>
+          </div>
+          <div className="h-64 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={hourlyTraffic}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(10, 22, 43, 0.06)" />
+                <XAxis dataKey="hour" tick={{ fontSize: 11, fill: '#0A162B' }} fontFamily="Claimcheck, Numbers-Claimcheck, Chivo Mono, monospace" />
+                <YAxis tick={{ fontSize: 11, fill: '#0A162B' }} fontFamily="Claimcheck, Numbers-Claimcheck, Chivo Mono, monospace" />
+                <Tooltip 
+                  contentStyle={{ 
+                    backgroundColor: '#FFFFFF', 
+                    borderColor: 'rgba(10, 22, 43, 0.12)',
+                    borderRadius: '12px',
+                    boxShadow: '0 12px 30px rgba(0,0,0,0.1)',
+                    fontSize: '12px',
+                    fontFamily: 'Rokkitt, serif'
+                  }} 
+                />
+                <Bar dataKey="count" name="Seated Guests" fill="#1A3A6D" radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
-        <div className="h-64 w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={hourlyTraffic}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(10, 22, 43, 0.06)" />
-              <XAxis dataKey="hour" tick={{ fontSize: 11, fill: '#0A162B' }} fontFamily="Claimcheck, Numbers-Claimcheck, Chivo Mono, monospace" />
-              <YAxis tick={{ fontSize: 11, fill: '#0A162B' }} fontFamily="Claimcheck, Numbers-Claimcheck, Chivo Mono, monospace" />
-              <Tooltip 
-                contentStyle={{ 
-                  backgroundColor: '#FFFFFF', 
-                  borderColor: 'rgba(10, 22, 43, 0.12)',
-                  borderRadius: '12px',
-                  boxShadow: '0 12px 30px rgba(0,0,0,0.1)',
-                  fontSize: '12px',
-                  fontFamily: 'Rokkitt, serif'
-                }} 
-              />
-              <Bar dataKey="count" name="Seated Guests" fill="#1A3A6D" radius={[6, 6, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+      )}
+
+      {/* Day-by-Day Historical Performance Breakdown */}
+      <div className="bg-white border border-border rounded-2xl p-6 shadow-luxury space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-base font-bold font-display text-foreground">
+              Daily Attendance & Capture Performance ({selectedMonth})
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              Day-by-day actual covers, forecast variance, and peak breakfast rush hours.
+            </p>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs font-sans">
+            <thead className="bg-[#F2EBE4]/60 border-b border-border text-[10px] font-mono-custom font-bold uppercase tracking-wider text-muted-foreground">
+              <tr>
+                <th className="px-4 py-3">Date</th>
+                <th className="px-4 py-3">Forecast</th>
+                <th className="px-4 py-3">Breakfast Actual</th>
+                <th className="px-4 py-3">Dinner Actual</th>
+                <th className="px-4 py-3">Total Pax</th>
+                <th className="px-4 py-3">Capture Rate</th>
+                <th className="px-4 py-3">VIPs</th>
+                <th className="px-4 py-3">Peak Hour</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {loading ? (
+                <tr>
+                  <td colSpan={8} className="p-8 text-center text-xs font-mono-custom text-muted-foreground">
+                    Loading monthly historical breakdown...
+                  </td>
+                </tr>
+              ) : dailyStats.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="p-8 text-center text-xs font-mono-custom text-muted-foreground">
+                    No historical logs for this month yet. Use the <strong>Opera Sync & Historical Hub</strong> to backfill past data.
+                  </td>
+                </tr>
+              ) : (
+                dailyStats.map((d) => (
+                  <tr key={d.date} className="hover:bg-[#F2EBE4]/30 transition-colors">
+                    <td className="px-4 py-3 font-mono-custom font-bold text-foreground">
+                      {d.date}
+                    </td>
+                    <td className="px-4 py-3 font-mono-custom text-muted-foreground">
+                      {d.forecastCovers}
+                    </td>
+                    <td className="px-4 py-3 font-mono-custom font-bold text-accent">
+                      {d.breakfastActual}
+                    </td>
+                    <td className="px-4 py-3 font-mono-custom text-indigo-700">
+                      {d.dinnerActual}
+                    </td>
+                    <td className="px-4 py-3 font-mono-custom font-bold text-foreground">
+                      {d.totalActual}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex px-2 py-0.5 rounded-md text-[10px] font-mono-custom font-bold ${
+                        d.captureRate >= 90
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : d.captureRate >= 75
+                          ? 'bg-blue-100 text-blue-800'
+                          : 'bg-amber-100 text-amber-800'
+                      }`}>
+                        {d.captureRate}%
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 font-mono-custom text-foreground">
+                      {d.vipPax > 0 ? `${d.vipPax} Pax` : '—'}
+                    </td>
+                    <td className="px-4 py-3 font-mono-custom font-bold text-foreground">
+                      {d.peakHour || '08:00'}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
   );
 };
+

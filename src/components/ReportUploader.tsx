@@ -8,12 +8,14 @@ import {
 } from '../firebase';
 import { parseInHouseReport, ParseResult } from '../parsing';
 import { businessDate } from '../lib/businessDate';
+import { AutomatedSyncManager } from './AutomatedSyncManager';
 import { 
   Upload, 
   FileText, 
   CheckCircle, 
   Database,
-  RefreshCw
+  RefreshCw,
+  Zap
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -28,6 +30,7 @@ interface ReportUploaderProps {
 }
 
 export const ReportUploader: React.FC<ReportUploaderProps> = ({ hotelId }) => {
+  const [mainMode, setMainMode] = useState<'automated' | 'manual'>('automated');
   const [file, setFile] = useState<File | null>(null);
   const [parsing, setParsing] = useState(false);
   const [parseResult, setParseResult] = useState<ParseResult | null>(null);
@@ -197,31 +200,64 @@ export const ReportUploader: React.FC<ReportUploaderProps> = ({ hotelId }) => {
   };
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
+    <div className="space-y-6 max-w-5xl mx-auto">
       {/* Header */}
       <div className="bg-white rounded-2xl p-6 border border-border shadow-luxury flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
             <span className="label-mono text-accent">Opera PMS Integration</span>
             <span className="text-xs text-muted-foreground">•</span>
-            <span className="font-mono-custom text-xs font-semibold text-muted-foreground">Automated Sync Engine</span>
+            <span className="font-mono-custom text-xs font-semibold text-muted-foreground">Automated & Historical Data Hub</span>
           </div>
           <h2 className="text-2xl font-bold font-display text-foreground mt-1 tracking-tight">
-            Opera Report Synchronization
+            Opera Data & Synchronization Hub
           </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Import In-House Guest Lists, Forecast Package Reports, or combined Opera TSV exports.
+            Automated Daily Ingestion, Historical Backfill, and Manual File Upload for Novotel & ibis.
           </p>
         </div>
 
-        <button
-          onClick={handleReloadSampleData}
-          disabled={uploading}
-          className="px-4 py-2 rounded-xl border border-border bg-white hover:bg-[#F2EBE4]/50 text-foreground font-mono-custom font-medium text-xs flex items-center gap-2 shadow-xs transition-all"
-        >
-          <RefreshCw size={13} className="text-accent" />
-          Reload Sample Opera Datasets
-        </button>
+        <div className="flex items-center gap-2">
+          <div className="p-1 rounded-xl bg-[#F2EBE4]/60 border border-border flex items-center gap-1">
+            <button
+              onClick={() => setMainMode('automated')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-mono-custom font-bold transition-all cursor-pointer ${
+                mainMode === 'automated'
+                  ? 'bg-black text-white shadow-xs'
+                  : 'text-foreground hover:bg-[#F2EBE4]'
+              }`}
+            >
+              <span className="flex items-center gap-1.5">
+                <Zap size={13} className={mainMode === 'automated' ? 'text-amber-400' : 'text-accent'} />
+                Automated & Historical Hub
+              </span>
+            </button>
+
+            <button
+              onClick={() => setMainMode('manual')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-mono-custom font-bold transition-all cursor-pointer ${
+                mainMode === 'manual'
+                  ? 'bg-black text-white shadow-xs'
+                  : 'text-foreground hover:bg-[#F2EBE4]'
+              }`}
+            >
+              <span className="flex items-center gap-1.5">
+                <Upload size={13} />
+                Manual TSV / CSV Upload
+              </span>
+            </button>
+          </div>
+
+          <button
+            onClick={handleReloadSampleData}
+            disabled={uploading}
+            className="px-3 py-2 rounded-xl border border-border bg-white hover:bg-[#F2EBE4]/50 text-foreground font-mono-custom font-medium text-xs flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
+            title="Reload official sample Opera datasets"
+          >
+            <RefreshCw size={12} className="text-accent" />
+            <span className="hidden sm:inline">Reload Samples</span>
+          </button>
+        </div>
       </div>
 
       {/* Success Notification */}
@@ -239,73 +275,84 @@ export const ReportUploader: React.FC<ReportUploaderProps> = ({ hotelId }) => {
         )}
       </AnimatePresence>
 
-      {/* Drag and drop upload zone */}
-      <div className="p-10 rounded-2xl border-2 border-dashed border-border bg-white hover:border-accent/40 transition-all text-center space-y-4 shadow-luxury">
-        <div className="w-12 h-12 rounded-2xl bg-accent/10 text-accent mx-auto flex items-center justify-center">
-          <Upload size={22} />
-        </div>
+      {/* MODE 1: Automated Sync & Historical Backfill */}
+      {mainMode === 'automated' && (
+        <AutomatedSyncManager hotelId={hotelId} />
+      )}
 
-        <div>
-          <h3 className="text-lg font-bold font-display text-foreground">Upload Opera TSV / CSV Export</h3>
-          <p className="text-xs text-muted-foreground mt-1 max-w-md mx-auto">
-            Drop your Opera In-House Guest Manifest or Package Forecast report here. Multi-property resort codes (HB4F8 & HB9U9) will be detected automatically.
-          </p>
-        </div>
+      {/* MODE 2: Manual TSV / CSV Upload */}
+      {mainMode === 'manual' && (
+        <div className="space-y-6">
+          {/* Drag and drop upload zone */}
+          <div className="p-10 rounded-2xl border-2 border-dashed border-border bg-white hover:border-accent/40 transition-all text-center space-y-4 shadow-luxury">
+            <div className="w-12 h-12 rounded-2xl bg-accent/10 text-accent mx-auto flex items-center justify-center">
+              <Upload size={22} />
+            </div>
 
-        <label className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-white border border-black/20 text-black font-mono-custom font-bold text-xs cursor-pointer shadow-xs hover:bg-[#F2EBE4] transition-all">
-          <FileText size={15} className="text-black" />
-          Choose Opera Report File
-          <input
-            type="file"
-            accept=".tsv,.csv,.txt"
-            onChange={handleFileChange}
-            className="hidden"
-          />
-        </label>
-      </div>
-
-      {/* Parse Preview */}
-      {parseResult && (
-        <div className="bg-white border border-border rounded-2xl p-6 shadow-luxury space-y-5">
-          <div className="flex items-center justify-between border-b border-border pb-3">
             <div>
-              <span className="label-mono text-black font-bold">File Analysis</span>
-              <h3 className="text-lg font-bold font-display text-foreground">{file?.name}</h3>
-              <p className="text-xs text-muted-foreground font-mono-custom mt-0.5">
-                Target: <strong className="text-foreground capitalize">{parseResult.hotelId}</strong> • Type: <strong className="text-foreground capitalize">{parseResult.reportType}</strong>
+              <h3 className="text-lg font-bold font-display text-foreground">Upload Opera TSV / CSV Export</h3>
+              <p className="text-xs text-muted-foreground mt-1 max-w-md mx-auto">
+                Drop your Opera In-House Guest Manifest or Package Forecast report here. Multi-property resort codes (HB4F8 & HB9U9) will be detected automatically.
               </p>
             </div>
 
-            <button
-              onClick={handleSyncToDatabase}
-              disabled={uploading}
-              className="px-5 py-2.5 rounded-xl bg-white border border-black/20 text-black font-mono-custom font-bold text-xs shadow-xs flex items-center gap-2 hover:bg-[#F2EBE4] transition-all cursor-pointer"
-            >
-              <Database size={15} className="text-black" />
-              {uploading ? 'Synchronizing...' : 'Confirm & Sync to Database'}
-            </button>
+            <label className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-white border border-black/20 text-black font-mono-custom font-bold text-xs cursor-pointer shadow-xs hover:bg-[#F2EBE4] transition-all">
+              <FileText size={15} className="text-black" />
+              Choose Opera Report File
+              <input
+                type="file"
+                accept=".tsv,.csv,.txt"
+                onChange={handleFileChange}
+                className="hidden"
+              />
+            </label>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="stat-card-luxury p-3.5">
-              <span className="label-mono">Rooms Found</span>
-              <p className="text-xl font-bold font-display text-foreground mt-0.5">{parseResult.stats.totalRooms}</p>
+          {/* Parse Preview */}
+          {parseResult && (
+            <div className="bg-white border border-border rounded-2xl p-6 shadow-luxury space-y-5">
+              <div className="flex items-center justify-between border-b border-border pb-3">
+                <div>
+                  <span className="label-mono text-black font-bold">File Analysis</span>
+                  <h3 className="text-lg font-bold font-display text-foreground">{file?.name}</h3>
+                  <p className="text-xs text-muted-foreground font-mono-custom mt-0.5">
+                    Target: <strong className="text-foreground capitalize">{parseResult.hotelId}</strong> • Type: <strong className="text-foreground capitalize">{parseResult.reportType}</strong>
+                  </p>
+                </div>
+
+                <button
+                  onClick={handleSyncToDatabase}
+                  disabled={uploading}
+                  className="px-5 py-2.5 rounded-xl bg-white border border-black/20 text-black font-mono-custom font-bold text-xs shadow-xs flex items-center gap-2 hover:bg-[#F2EBE4] transition-all cursor-pointer"
+                >
+                  <Database size={15} className="text-black" />
+                  {uploading ? 'Synchronizing...' : 'Confirm & Sync to Database'}
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="stat-card-luxury p-3.5">
+                  <span className="label-mono">Rooms Found</span>
+                  <p className="text-xl font-bold font-display text-foreground mt-0.5">{parseResult.stats.totalRooms}</p>
+                </div>
+                <div className="stat-card-luxury p-3.5">
+                  <span className="label-mono text-accent">Breakfast Pax</span>
+                  <p className="text-xl font-bold font-display text-accent mt-0.5">{parseResult.stats.totalBreakfastPax}</p>
+                </div>
+                <div className="stat-card-luxury p-3.5">
+                  <span className="label-mono text-indigo-700">Dinner Pax</span>
+                  <p className="text-xl font-bold font-display text-indigo-800 mt-0.5">{parseResult.stats.totalDinnerPax}</p>
+                </div>
+                <div className="stat-card-luxury p-3.5">
+                  <span className="label-mono">Forecast Days</span>
+                  <p className="text-xl font-bold font-display text-foreground mt-0.5">{parseResult.stats.forecastDaysCount}</p>
+                </div>
+              </div>
             </div>
-            <div className="stat-card-luxury p-3.5">
-              <span className="label-mono text-accent">Breakfast Pax</span>
-              <p className="text-xl font-bold font-display text-accent mt-0.5">{parseResult.stats.totalBreakfastPax}</p>
-            </div>
-            <div className="stat-card-luxury p-3.5">
-              <span className="label-mono text-indigo-700">Dinner Pax</span>
-              <p className="text-xl font-bold font-display text-indigo-800 mt-0.5">{parseResult.stats.totalDinnerPax}</p>
-            </div>
-            <div className="stat-card-luxury p-3.5">
-              <span className="label-mono">Forecast Days</span>
-              <p className="text-xl font-bold font-display text-foreground mt-0.5">{parseResult.stats.forecastDaysCount}</p>
-            </div>
-          </div>
+          )}
         </div>
       )}
     </div>
   );
 };
+

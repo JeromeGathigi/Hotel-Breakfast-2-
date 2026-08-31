@@ -14,6 +14,7 @@ import { entitledPax, hasMealEntitlement, canonicalPlan } from '../lib/meals';
 import { CheckInModal } from './CheckInModal';
 import { OperaAuditModal } from './OperaAuditModal';
 import { BatchCheckInModal } from './BatchCheckInModal';
+import { GuestCardSkeleton, StatsCardSkeleton } from './Skeleton';
 import { 
   Search, 
   UserCheck, 
@@ -32,7 +33,8 @@ import {
   Check,
   X,
   Sparkles,
-  ExternalLink
+  ExternalLink,
+  Calendar
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -171,6 +173,16 @@ export const GuestSearch: React.FC<GuestSearchProps> = ({
             <p className="text-xs text-muted-foreground mt-0.5">
               {MEAL_SERVICES.find((m) => m.id === activeMealService)?.description}
             </p>
+
+            {/* Weekend Breakfast Operational Notice */}
+            {activeMealService === 'breakfast' && (
+              <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#F2EBE4]/80 border border-border text-xs text-black font-medium">
+                <Calendar size={13} className="text-black shrink-0" />
+                <span>
+                  <strong className="font-bold text-black">Weekend Schedule:</strong> Breakfast runs until <strong className="font-bold text-black">12:00 midday</strong> on Saturdays & Sundays for both Novotel and ibis.
+                </span>
+              </div>
+            )}
           </div>
 
             {/* Service Selector & Batch Action */}
@@ -278,8 +290,27 @@ export const GuestSearch: React.FC<GuestSearchProps> = ({
       </div>
 
       {/* Guest Results Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredGuests.map((guest) => {
+      {loading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[1, 2, 3, 4, 5, 6].map((idx) => (
+            <GuestCardSkeleton key={idx} />
+          ))}
+        </div>
+      ) : filteredGuests.length === 0 ? (
+        <div className="bg-white rounded-2xl p-12 border border-border text-center shadow-luxury space-y-3">
+          <div className="w-12 h-12 rounded-2xl bg-[#F2EBE4] text-black flex items-center justify-center mx-auto">
+            <Search size={22} className="text-black" />
+          </div>
+          <h3 className="text-base font-bold font-display text-foreground">No Guests Found</h3>
+          <p className="text-xs text-muted-foreground max-w-sm mx-auto font-sans">
+            {queryText 
+              ? `No guest matches query "${queryText}". Try searching room number, guest name, or company.` 
+              : 'No in-house guests currently synced for this property.'}
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredGuests.map((guest) => {
           const checkIn = checkIns[guest.roomNumber];
           const isCheckedIn = Boolean(checkIn);
           const totalOccupants = (guest.adults || 1) + (guest.children || 0);
@@ -419,7 +450,8 @@ export const GuestSearch: React.FC<GuestSearchProps> = ({
             </motion.div>
           );
         })}
-      </div>
+        </div>
+      )}
 
       {/* Check In Modal */}
       <AnimatePresence>

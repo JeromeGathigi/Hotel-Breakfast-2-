@@ -134,3 +134,24 @@ export interface ReportMetadata {
   };
   anomaliesCount?: number;
 }
+
+export interface DailySummary {
+  date: string; // YYYY-MM-DD
+  hotelId: string;
+  totalBreakfastPax: number;
+  totalLunchPax: number;
+  totalDinnerPax: number;
+  totalCovers: number;
+  roomsAttended: number;
+  forecastCovers: number;
+  captureRatePercent: number;
+  vipPax: number;
+  hourlyBreakdown: Record<string, number>;
+  paxBreakdown: {
+    adults: number;
+    children: number;
+    infants: number;
+  };
+  peakHour?: string;
+  updatedAt?: string;
+}

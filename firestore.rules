@@ -15,13 +15,12 @@ service cloud.firestore {
       );
     }
 
-    // Staff role check: staff custom claim, admin, or authenticated user
+    // Staff role check: staff custom claim, admin, or @accor.com domain
     function isStaff() {
       return isAuthenticated() && (
         request.auth.token.staff == true ||
         isAdmin() ||
-        request.auth.token.email.matches('.*@(novotel|ibis|accor).*') ||
-        request.auth.token.email.lower() == 'jeromegathigi@gmail.com'
+        request.auth.token.email.lower().matches('^[^@]+@accor\\.com$')
       );
     }
 

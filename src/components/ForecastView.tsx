@@ -8,6 +8,7 @@ import {
 } from '../firebase';
 import { MealForecastItem } from '../types';
 import { SAMPLE_NOVOTEL_FORECAST, SAMPLE_IBIS_FORECAST } from '../parsing/__fixtures__/sampleData';
+import { StatsCardSkeleton, ChartSkeleton, TableRowSkeleton } from './Skeleton';
 import { 
   BarChart, 
   Bar, 
@@ -140,80 +141,92 @@ export const ForecastView: React.FC<ForecastViewProps> = ({ hotelId }) => {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="stat-card-luxury">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="label-mono">Total Projected Covers</span>
-            <Utensils size={16} className="text-accent" />
-          </div>
-          <p className="text-3xl font-bold font-display text-foreground mt-2">{totalAllCovers}</p>
-          <p className="text-xs font-mono-custom text-muted-foreground mt-1">Over {displayedForecasts.length} days</p>
+      {loading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map((idx) => (
+            <StatsCardSkeleton key={idx} />
+          ))}
         </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="stat-card-luxury">
+            <div className="flex items-center justify-between text-muted-foreground">
+              <span className="label-mono">Total Projected Covers</span>
+              <Utensils size={16} className="text-accent" />
+            </div>
+            <p className="text-3xl font-bold font-display text-foreground mt-2">{totalAllCovers}</p>
+            <p className="text-xs font-mono-custom text-muted-foreground mt-1">Over {displayedForecasts.length} days</p>
+          </div>
 
-        <div className="stat-card-luxury">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="label-mono text-accent">Breakfast Covers (BF)</span>
-            <Coffee size={16} className="text-accent" />
+          <div className="stat-card-luxury">
+            <div className="flex items-center justify-between text-muted-foreground">
+              <span className="label-mono text-accent">Breakfast Covers (BF)</span>
+              <Coffee size={16} className="text-accent" />
+            </div>
+            <p className="text-3xl font-bold font-display text-accent mt-2">{totalBreakfastCovers}</p>
+            <p className="text-xs font-mono-custom text-muted-foreground mt-1">
+              {displayedForecasts.length > 0 ? Math.round(totalBreakfastCovers / displayedForecasts.length) : 0} avg / day
+            </p>
           </div>
-          <p className="text-3xl font-bold font-display text-accent mt-2">{totalBreakfastCovers}</p>
-          <p className="text-xs font-mono-custom text-muted-foreground mt-1">
-            {displayedForecasts.length > 0 ? Math.round(totalBreakfastCovers / displayedForecasts.length) : 0} avg / day
-          </p>
-        </div>
 
-        <div className="stat-card-luxury">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="label-mono text-indigo-700">Dinner Covers (DIN)</span>
-            <Moon size={16} className="text-indigo-600" />
+          <div className="stat-card-luxury">
+            <div className="flex items-center justify-between text-muted-foreground">
+              <span className="label-mono text-indigo-700">Dinner Covers (DIN)</span>
+              <Moon size={16} className="text-indigo-600" />
+            </div>
+            <p className="text-3xl font-bold font-display text-indigo-800 mt-2">{totalDinnerCovers}</p>
+            <p className="text-xs font-mono-custom text-muted-foreground mt-1">Half-board & Package dinners</p>
           </div>
-          <p className="text-3xl font-bold font-display text-indigo-800 mt-2">{totalDinnerCovers}</p>
-          <p className="text-xs font-mono-custom text-muted-foreground mt-1">Half-board & Package dinners</p>
-        </div>
 
-        <div className="stat-card-luxury">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="label-mono text-emerald-700">Daily Average Demand</span>
-            <TrendingUp size={16} className="text-emerald-600" />
+          <div className="stat-card-luxury">
+            <div className="flex items-center justify-between text-muted-foreground">
+              <span className="label-mono text-emerald-700">Daily Average Demand</span>
+              <TrendingUp size={16} className="text-emerald-600" />
+            </div>
+            <p className="text-3xl font-bold font-display text-emerald-800 mt-2">{avgDailyCovers}</p>
+            <p className="text-xs font-mono-custom text-muted-foreground mt-1">F&B seating capacity guidance</p>
           </div>
-          <p className="text-3xl font-bold font-display text-emerald-800 mt-2">{avgDailyCovers}</p>
-          <p className="text-xs font-mono-custom text-muted-foreground mt-1">F&B seating capacity guidance</p>
         </div>
-      </div>
+      )}
 
       {/* Chart Section */}
-      <div className="bg-white border border-border rounded-2xl p-6 shadow-luxury">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h3 className="text-lg font-bold font-display text-foreground">Projected Meal Covers</h3>
-            <p className="text-xs text-muted-foreground">Daily distribution of breakfast and dinner packages</p>
+      {loading ? (
+        <ChartSkeleton height="h-80" />
+      ) : (
+        <div className="bg-white border border-border rounded-2xl p-6 shadow-luxury">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h3 className="text-lg font-bold font-display text-foreground">Projected Meal Covers</h3>
+              <p className="text-xs text-muted-foreground">Daily distribution of breakfast and dinner packages</p>
+            </div>
+          </div>
+
+          <div className="h-72 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(10, 22, 43, 0.06)" />
+                <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#0A162B' }} fontFamily="Claimcheck, Numbers-Claimcheck, Chivo Mono, monospace" />
+                <YAxis tick={{ fontSize: 11, fill: '#0A162B' }} fontFamily="Claimcheck, Numbers-Claimcheck, Chivo Mono, monospace" />
+                <Tooltip 
+                  contentStyle={{ 
+                    backgroundColor: '#FFFFFF', 
+                    borderColor: 'rgba(10, 22, 43, 0.12)',
+                    borderRadius: '12px',
+                    boxShadow: '0 12px 30px rgba(0,0,0,0.1)',
+                    fontSize: '12px',
+                    color: '#0A162B',
+                    fontFamily: 'Rokkitt, serif'
+                  }} 
+                />
+                <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '12px', fontFamily: 'Claimcheck, Numbers-Claimcheck, Chivo Mono, monospace' }} />
+                <Bar dataKey="breakfast" name="Breakfast Covers" fill="#1A3A6D" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="dinner" name="Dinner Covers" fill="#6366f1" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="breaks" name="Coffee Breaks" fill="#10b981" radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         </div>
-
-        <div className="h-72 w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(10, 22, 43, 0.06)" />
-              <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#0A162B' }} fontFamily="Claimcheck, Numbers-Claimcheck, Chivo Mono, monospace" />
-              <YAxis tick={{ fontSize: 11, fill: '#0A162B' }} fontFamily="Claimcheck, Numbers-Claimcheck, Chivo Mono, monospace" />
-              <Tooltip 
-                contentStyle={{ 
-                  backgroundColor: '#FFFFFF', 
-                  borderColor: 'rgba(10, 22, 43, 0.12)',
-                  borderRadius: '12px',
-                  boxShadow: '0 12px 30px rgba(0,0,0,0.1)',
-                  fontSize: '12px',
-                  color: '#0A162B',
-                  fontFamily: 'Rokkitt, serif'
-                }} 
-              />
-              <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '12px', fontFamily: 'Claimcheck, Numbers-Claimcheck, Chivo Mono, monospace' }} />
-              <Bar dataKey="breakfast" name="Breakfast Covers" fill="#1A3A6D" radius={[6, 6, 0, 0]} />
-              <Bar dataKey="dinner" name="Dinner Covers" fill="#6366f1" radius={[6, 6, 0, 0]} />
-              <Bar dataKey="breaks" name="Coffee Breaks" fill="#10b981" radius={[6, 6, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
+      )}
 
       {/* Day by Day Forecast Table */}
       <div className="bg-white border border-border rounded-2xl overflow-hidden shadow-luxury">
@@ -239,7 +252,13 @@ export const ForecastView: React.FC<ForecastViewProps> = ({ hotelId }) => {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {displayedForecasts.map((row) => (
+              {loading ? (
+                <>
+                  {[1, 2, 3, 4, 5, 6, 7].map((idx) => (
+                    <TableRowSkeleton key={idx} cols={8} />
+                  ))}
+                </>
+              ) : displayedForecasts.map((row) => (
                 <tr 
                   key={row.date} 
                   onClick={() => setSelectedDay(row)}

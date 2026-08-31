@@ -44,13 +44,13 @@ export const CheckInModal: React.FC<CheckInModalProps> = ({
   onSuccess,
 }) => {
   // Entitlements
-  const maxAdults = guest.adults || 1;
+  const maxAdults = guest.adults ?? 0;
   const maxChildren = guest.children || 0;
   const totalOccupants = maxAdults + maxChildren;
 
   // Existing checkin numbers
-  const initialAdultsAte = existingCheckIn ? existingCheckIn.adultsAte : 1;
-  const initialChildrenAte = existingCheckIn ? existingCheckIn.childrenAte : 0;
+  const initialAdultsAte = existingCheckIn ? existingCheckIn.adultsAte : (guest.adults > 0 ? guest.adults : 0);
+  const initialChildrenAte = existingCheckIn ? existingCheckIn.childrenAte : (guest.children || 0);
   const initialInfantsAte = existingCheckIn ? existingCheckIn.infantsAte : 0;
 
   const [mealService, setMealService] = useState<MealServiceType>(activeMealService);
@@ -361,7 +361,7 @@ export const CheckInModal: React.FC<CheckInModalProps> = ({
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {availableOverCapacityReasons().map((r) => (
+                {availableOverCapacityReasons(hotelId).map((r) => (
                   <button
                     key={r.code}
                     type="button"

@@ -11,6 +11,7 @@ import {
 } from '../firebase';
 import { DiningTable, MealServiceType, Guest } from '../types';
 import { DEFAULT_NOVOTEL_TABLES, DEFAULT_IBIS_TABLES } from '../constants';
+import { TableCardSkeleton } from './Skeleton';
 import { 
   Users, 
   Plus, 
@@ -324,76 +325,90 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
       </div>
 
       {/* Floor Plan Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-        {filteredTables.map((table) => {
-          const isOccupied = table.status === 'occupied';
-          const isAvailable = table.status === 'available';
-          const isReserved = table.status === 'reserved';
-          const isCleaning = table.status === 'cleaning';
+      {loading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((idx) => (
+            <TableCardSkeleton key={idx} />
+          ))}
+        </div>
+      ) : filteredTables.length === 0 ? (
+        <div className="bg-white rounded-2xl p-12 border border-border text-center shadow-luxury">
+          <p className="text-sm font-medium text-muted-foreground font-sans">
+            No tables configured in {selectedZone} zone.
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+          {filteredTables.map((table) => {
+            const isOccupied = table.status === 'occupied';
+            const isAvailable = table.status === 'available';
+            const isReserved = table.status === 'reserved';
+            const isCleaning = table.status === 'cleaning';
 
-          return (
-            <motion.div
-              key={table.id}
-              layout
-              onClick={() => setSelectedTable(table)}
-              className={`relative rounded-2xl border p-4 cursor-pointer transition-all duration-200 hover:border-accent ${
-                isOccupied
-                  ? 'bg-white border-accent/40 shadow-sm ring-1 ring-accent/10'
-                  : isReserved
-                  ? 'bg-amber-50/50 border-amber-300 shadow-sm'
-                  : isCleaning
-                  ? 'bg-slate-50 border-slate-300 shadow-sm'
-                  : 'bg-white border-border shadow-luxury'
-              }`}
-            >
-              <div className="flex items-start justify-between">
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-lg font-bold font-display text-foreground">{table.tableNumber}</span>
-                    <span className="room-badge-luxury text-[10px]">
-                      {table.capacity} seats
-                    </span>
+            return (
+              <motion.div
+                key={table.id}
+                layout
+                onClick={() => setSelectedTable(table)}
+                className={`relative rounded-2xl border p-4 cursor-pointer transition-all duration-200 hover:border-accent ${
+                  isOccupied
+                    ? 'bg-white border-accent/40 shadow-sm ring-1 ring-accent/10'
+                    : isReserved
+                    ? 'bg-amber-50/50 border-amber-300 shadow-sm'
+                    : isCleaning
+                    ? 'bg-slate-50 border-slate-300 shadow-sm'
+                    : 'bg-white border-border shadow-luxury'
+                }`}
+              >
+                <div className="flex items-start justify-between">
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-lg font-bold font-display text-foreground">{table.tableNumber}</span>
+                      <span className="room-badge-luxury text-[10px]">
+                        {table.capacity} seats
+                      </span>
+                    </div>
+                    <p className="label-mono mt-1">{table.zone}</p>
                   </div>
-                  <p className="label-mono mt-1">{table.zone}</p>
+
+                  <span
+                    className={`inline-flex items-center px-2 py-0.5 rounded-md text-[9px] font-mono-custom font-semibold uppercase ${
+                      isOccupied
+                        ? 'bg-accent text-white'
+                        : isAvailable
+                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                        : isReserved
+                        ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                        : 'bg-slate-200 text-slate-700 border border-slate-300'
+                    }`}
+                  >
+                    {table.status}
+                  </span>
                 </div>
 
-                <span
-                  className={`inline-flex items-center px-2 py-0.5 rounded-md text-[9px] font-mono-custom font-semibold uppercase ${
-                    isOccupied
-                      ? 'bg-accent text-white'
-                      : isAvailable
-                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                      : isReserved
-                      ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                      : 'bg-slate-200 text-slate-700 border border-slate-300'
-                  }`}
-                >
-                  {table.status}
-                </span>
-              </div>
-
-              {/* Occupancy Info */}
-              {isOccupied && table.occupiedByRoom ? (
-                <div className="mt-3.5 pt-2.5 border-t border-accent/20 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold font-mono-custom text-accent">RM {table.occupiedByRoom}</span>
-                    <span className="text-[10px] font-mono-custom text-muted-foreground flex items-center gap-1">
-                      <Clock size={10} /> {table.occupiedSince || 'Active'}
-                    </span>
+                {/* Occupancy Info */}
+                {isOccupied && table.occupiedByRoom ? (
+                  <div className="mt-3.5 pt-2.5 border-t border-accent/20 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold font-mono-custom text-accent">RM {table.occupiedByRoom}</span>
+                      <span className="text-[10px] font-mono-custom text-muted-foreground flex items-center gap-1">
+                        <Clock size={10} /> {table.occupiedSince || 'Active'}
+                      </span>
+                    </div>
+                    <p className="text-xs font-bold font-sans text-foreground truncate">{table.occupiedByGuest || 'Seated Guest'}</p>
+                    <p className="text-[10px] font-mono-custom text-muted-foreground">{table.occupiedPax || table.capacity} Pax seated</p>
                   </div>
-                  <p className="text-xs font-bold font-sans text-foreground truncate">{table.occupiedByGuest || 'Seated Guest'}</p>
-                  <p className="text-[10px] font-mono-custom text-muted-foreground">{table.occupiedPax || table.capacity} Pax seated</p>
-                </div>
-              ) : (
-                <div className="mt-3.5 pt-2.5 border-t border-border/60 flex items-center justify-between text-[11px] font-mono-custom text-muted-foreground">
-                  <span>{isAvailable ? 'Ready to seat' : isReserved ? 'Reserved' : 'Busser turnover'}</span>
-                  <ChevronRight size={13} className="text-muted-foreground/60" />
-                </div>
-              )}
-            </motion.div>
-          );
-        })}
-      </div>
+                ) : (
+                  <div className="mt-3.5 pt-2.5 border-t border-border/60 flex items-center justify-between text-[11px] font-mono-custom text-muted-foreground">
+                    <span>{isAvailable ? 'Ready to seat' : isReserved ? 'Reserved' : 'Busser turnover'}</span>
+                    <ChevronRight size={13} className="text-muted-foreground/60" />
+                  </div>
+                )}
+              </motion.div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Selected Table Action Modal */}
       <AnimatePresence>

@@ -31,7 +31,7 @@ export const HOTELS: HotelInfo[] = [
     cuisine: 'International Buffet, Local Northern Thai, Artisan Pizzas & Friday Seafood Buffet',
     description: 'Modern all-day dining restaurant featuring contemporary Northern Thai accents, outdoor garden terrace, international breakfast buffet with live stations, and Friday Seafood Buffets.',
     features: [
-      'International Breakfast Buffet (06:00 - 10:30)',
+      'International Breakfast Buffet (06:00 - 10:30 | Weekends until 12:00 Midday)',
       'Live Egg, Asian Noodle & Congee Stations',
       'Friday Seafood Buffet (17:30 - 21:00, THB 999 net)',
       'Authentic Northern Thai & Western À La Carte'
@@ -53,7 +53,7 @@ export const HOTELS: HotelInfo[] = [
     cuisine: 'Authentic Indian Cuisine, Vegan/Vegetarian Sets, Street Food & 24/7 Bar',
     description: 'Vibrant dining celebrating authentic Indian street food culture with organic vegan sets, monthly "Delhi Meets The World" fusion specials, and Charlie\'s Corner 24/7 pop-rock bar & alfresco terrace.',
     features: [
-      'Morning Breakfast Buffet (06:00 - 10:30)',
+      'Morning Breakfast Buffet (06:00 - 10:30 | Weekends until 12:00 Midday)',
       'Delhi Street Authentic Indian & Vegan Sets (11:30 - 21:30)',
       'Delhi Meets The World Monthly Specials',
       "Charlie's Corner 24/7 Bar, Craft Beers & Alfresco"
@@ -79,8 +79,8 @@ export const MEAL_SERVICES = [
   {
     id: 'breakfast',
     name: 'Breakfast Service',
-    time: '06:00 - 10:30',
-    description: 'International Morning Buffet, Live Egg & Asian Noodle Stations',
+    time: '06:00 - 10:30 (Weekends until 12:00)',
+    description: 'International Morning Buffet, Live Stations • Weekdays 06:00-10:30 | Weekends & Holidays until 12:00 Midday',
     iconName: 'Coffee',
   },
   {

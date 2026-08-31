@@ -20,5 +20,9 @@ export default defineConfig(({mode}) => {
       host: '0.0.0.0',
       hmr: process.env.DISABLE_HMR !== 'true',
     },
+    test: {
+      environment: 'node',
+      include: ['src/**/*.test.ts'],
+    },
   };
 });
