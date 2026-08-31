@@ -109,6 +109,7 @@ export const CheckInModal: React.FC<CheckInModalProps> = ({
     const recordedBy = currentUser?.email || 'staff@novotel-chiangmai.com';
 
     try {
+      const tableObj = selectedTable ? availableTables.find((t) => t.tableNumber === selectedTable) : null;
       const checkInDoc: CheckIn = {
         roomNumber: guest.roomNumber,
         guestName: guest.guestName,
@@ -121,6 +122,7 @@ export const CheckInModal: React.FC<CheckInModalProps> = ({
         infantsAte,
         recordedBy,
         tableNumber: selectedTable || null,
+        tableId: tableObj?.id || null,
         overCapacityReasons: isOverCapacity || isUnentitled ? overCapacityReasons : [],
         overCapacityOtherReason: overCapacityOther,
         authorizingStaff,
@@ -131,19 +133,16 @@ export const CheckInModal: React.FC<CheckInModalProps> = ({
       await setDoc(docRef, checkInDoc);
 
       // If table assigned, mark table as occupied
-      if (selectedTable) {
-        const tableObj = availableTables.find((t) => t.tableNumber === selectedTable);
-        if (tableObj) {
-          const tRef = doc(db, 'hotels', hotelId, 'tables', tableObj.id);
-          await updateDoc(tRef, {
-            status: 'occupied',
-            occupiedByRoom: guest.roomNumber,
-            occupiedByGuest: guest.guestName,
-            occupiedPax: totalHeadcount,
-            occupiedSince: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            mealService,
-          });
-        }
+      if (tableObj) {
+        const tRef = doc(db, 'hotels', hotelId, 'tables', tableObj.id);
+        await updateDoc(tRef, {
+          status: 'occupied',
+          occupiedByRoom: guest.roomNumber,
+          occupiedByGuest: guest.guestName,
+          occupiedPax: totalHeadcount,
+          occupiedSince: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          mealService,
+        });
       }
 
       // Log Opera Audit Trail

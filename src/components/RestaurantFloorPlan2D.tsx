@@ -353,180 +353,143 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
             {/* ------------------------------------------------------------- */}
             {!isIbis && (
               <>
-                {/* 1. Hostess Desk Room & Entrance (Left Wing) */}
-                <div className="absolute top-[24%] left-[3%] w-[15%] h-[56%] rounded-xl border-2 border-stone-800 bg-stone-100/60 p-2 pointer-events-none z-10 flex flex-col items-center justify-between shadow-xs">
-                  <div className="w-12 h-8 bg-stone-200 border-2 border-stone-600 rounded flex items-center justify-center shadow-xs">
-                    <span className="text-[7.5px] font-mono-custom font-black text-stone-800">DESK</span>
+                {/* 1. Left Back-of-House Wing & Top-Left Stairs / Terrace */}
+                <div className="absolute top-[15%] left-[4%] w-[10%] h-[38%] rounded-xl border-2 border-stone-700 bg-stone-100/70 pointer-events-none z-10 shadow-xs" />
+                
+                <div className="absolute top-[4%] left-[4%] w-[12%] h-[10%] rounded-lg border border-dashed border-stone-400 bg-stone-50/60 p-1 pointer-events-none z-10 flex items-center justify-center">
+                  <div className="flex flex-col gap-0.5 w-full">
+                    <div className="h-0.5 bg-stone-300 rounded-full" />
+                    <div className="h-0.5 bg-stone-300 rounded-full" />
+                    <div className="h-0.5 bg-stone-300 rounded-full" />
                   </div>
-                  <span className="text-[8px] font-mono-custom font-black tracking-wider text-stone-900 uppercase bg-white/95 px-2 py-0.5 rounded border border-stone-300">
+                </div>
+
+                {/* 2. Named Non-Table Feature: HOSTESS DESK (x:4, y:58, w:10, h:6) */}
+                <div className="absolute top-[58%] left-[4%] w-[10%] h-[6%] rounded-md bg-stone-100 border-2 border-stone-800 flex items-center justify-center pointer-events-none z-15 shadow-xs">
+                  <span className="text-[7px] font-mono-custom font-black tracking-wider text-stone-900 uppercase">
                     HOSTESS DESK
                   </span>
                 </div>
 
-                {/* Vertical COFFEE STAND dividing wall */}
-                <div className="absolute top-[24%] left-[18%] w-[2%] h-[56%] rounded-r-sm border-y-2 border-r-2 border-amber-600 bg-amber-100/90 flex flex-col items-center justify-center pointer-events-none z-15 select-none py-1">
+                {/* 3. Named Non-Table Feature: COFFEE STAND (x:19, y:62, w:3, h:17, verticalLabel: true) */}
+                <div className="absolute top-[62%] left-[19%] w-[3%] h-[17%] rounded-sm border-2 border-amber-700 bg-amber-100/90 flex flex-col items-center justify-center pointer-events-none z-15 shadow-xs py-0.5">
                   <span className="text-[6.5px] font-mono-custom font-black text-amber-950 uppercase tracking-widest [writing-mode:vertical-lr] rotate-180 text-center">
                     COFFEE STAND
                   </span>
                 </div>
 
-                {/* Top-Left Outdoor Terrace & Stairs */}
-                <div className="absolute top-[6%] left-[3%] w-[15%] h-[16%] rounded-lg border border-dashed border-emerald-500 bg-emerald-50/50 p-1.5 pointer-events-none z-10 flex items-center justify-between">
-                  <div className="flex flex-col gap-0.5 w-10 border-r border-stone-300 pr-1">
-                    <div className="h-1 bg-stone-300 rounded-full" />
-                    <div className="h-1 bg-stone-300 rounded-full" />
-                    <div className="h-1 bg-stone-300 rounded-full" />
-                    <span className="text-[6px] font-mono-custom text-stone-500 text-center">STAIRS</span>
-                  </div>
-                  <span className="text-[7.5px] font-mono-custom font-black text-emerald-900 uppercase">
-                    Terrace
-                  </span>
+                {/* Bench seating on left wall (x:19, y:82, w:3, h:14) */}
+                <div className="absolute top-[82%] left-[19%] w-[3%] h-[14%] rounded-sm bg-stone-200/90 border border-stone-400 pointer-events-none z-10" />
+
+                {/* 4. Gourmet Bar Enclosed Room (x:49, y:4, w:36, h:26) */}
+                <div className="absolute top-[4%] left-[49%] w-[36%] h-[26%] rounded-xl border-2 border-stone-800 bg-stone-50/50 pointer-events-none z-10">
+                  {/* Bar Counter down right side (x:79, y:6, w:4, h:22 relative to room) */}
+                  <div className="absolute top-[8%] right-[3%] w-[11%] h-[84%] rounded bg-cyan-200/90 border border-cyan-600" />
+                  {/* Unlabelled round table beside BAR6 (drawn, left blank) */}
+                  <div className="absolute top-[50%] right-[3%] w-[11%] h-[24%] rounded-full bg-stone-200 border border-stone-400" />
                 </div>
 
-                {/* 2. Gourmet Bar Enclosed Room (Top Enclosed Box) */}
-                <div className="absolute top-[6%] left-[36%] w-[36%] h-[24%] rounded-xl bg-cyan-50/40 border-2 border-stone-800 p-2 pointer-events-none z-10 flex flex-col justify-between shadow-xs">
-                  <div className="flex items-center justify-between">
-                    <span className="flex items-center gap-1 text-[8.5px] font-mono-custom font-black text-stone-900 uppercase tracking-wider bg-white/95 px-2 py-0.5 rounded border border-stone-300">
-                      <Wine size={10} className="text-cyan-800" /> Gourmet Bar (Enclosed)
-                    </span>
-                    <span className="text-[7.5px] font-mono-custom font-bold text-stone-600">
-                      BAR4-BAR6 / BAR1-BAR3
-                    </span>
-                  </div>
-                  {/* Bar Counter inside Gourmet Bar */}
-                  <div className="self-end w-22 h-4 rounded bg-cyan-200/90 border border-cyan-500 flex items-center justify-center">
-                    <span className="text-[7px] font-mono-custom font-bold text-cyan-950">BAR COUNTER</span>
-                  </div>
+                {/* 5. Main Dining Service Counter in C3-C4 gap (x:40, y:40, w:4, h:5) */}
+                <div className="absolute top-[40%] left-[40%] w-[4%] h-[5%] rounded-sm bg-stone-200/90 border border-stone-500 pointer-events-none z-10" />
+
+                {/* 6. Top Buffet Counter (x:58, y:34, w:22, h:5) */}
+                <div className="absolute top-[34%] left-[58%] w-[22%] h-[5%] rounded bg-cyan-100/90 border-2 border-cyan-600 flex items-center justify-between px-1 pointer-events-none z-10">
+                  <div className="w-3 h-3 rounded-xs bg-cyan-200 border border-cyan-400" />
+                  <div className="w-3 h-3 rounded-xs bg-cyan-200 border border-cyan-400" />
+                  <div className="w-3 h-3 rounded-xs bg-cyan-200 border border-cyan-400" />
                 </div>
 
-                {/* 3. Main Dining Room Zone & Buffet Stations */}
-                {/* Top Buffet Counters (Right of C5) */}
-                <div className="absolute top-[33.5%] left-[54%] w-[22%] h-[5%] rounded bg-cyan-100/90 border-2 border-cyan-500 flex items-center justify-between px-1 pointer-events-none z-10">
-                  <div className="w-3.5 h-3.5 rounded-sm bg-cyan-200 border border-cyan-400" />
-                  <div className="w-3.5 h-3.5 rounded-sm bg-cyan-200 border border-cyan-400" />
-                  <span className="text-[7px] font-mono-custom font-black text-cyan-950 uppercase tracking-wider">
-                    BUFFET (HOT LINE)
-                  </span>
-                  <div className="w-3.5 h-3.5 rounded-sm bg-cyan-200 border border-cyan-400" />
-                  <div className="w-3.5 h-3.5 rounded-sm bg-cyan-200 border border-cyan-400" />
+                {/* 7. Central Buffet Island (x:62, y:52, w:16, h:12) */}
+                <div className="absolute top-[52%] left-[62%] w-[16%] h-[12%] rounded-full bg-cyan-100/90 border-2 border-cyan-600 flex items-center justify-around px-1 pointer-events-none z-10 shadow-xs">
+                  <div className="w-4.5 h-4.5 rounded-full bg-cyan-300 border border-cyan-500" />
+                  <div className="w-4.5 h-4.5 rounded-full bg-cyan-300 border border-cyan-500" />
                 </div>
 
-                {/* Central Buffet Island (3 connected elements: oval - circle - oval) */}
-                <div className="absolute top-[48%] left-[57%] w-[16%] h-[12%] rounded-full bg-cyan-100/90 border-2 border-cyan-500 flex items-center justify-around px-2 pointer-events-none z-10 shadow-xs">
-                  <div className="w-5 h-5 rounded-full bg-cyan-300 border border-cyan-600" />
-                  <span className="text-[7px] font-mono-custom font-black text-cyan-950 uppercase tracking-wider text-center">
-                    BUFFET<br/>ISLAND
-                  </span>
-                  <div className="w-5 h-5 rounded-full bg-cyan-300 border border-cyan-600" />
+                {/* 8. Bottom Buffet Counter (x:58, y:72, w:22, h:5) */}
+                <div className="absolute top-[72%] left-[58%] w-[22%] h-[5%] rounded bg-cyan-100/90 border-2 border-cyan-600 flex items-center justify-between px-1 pointer-events-none z-10">
+                  <div className="w-3 h-3 rounded-xs bg-cyan-200 border border-cyan-400" />
+                  <div className="w-3 h-3 rounded-xs bg-cyan-200 border border-cyan-400" />
+                  <div className="w-3 h-3 rounded-xs bg-cyan-200 border border-cyan-400" />
                 </div>
 
-                {/* Bottom Buffet Counter (Right of A6) */}
-                <div className="absolute top-[71.5%] left-[54%] w-[22%] h-[5%] rounded bg-cyan-100/90 border-2 border-cyan-500 flex items-center justify-between px-1 pointer-events-none z-10">
-                  <div className="w-3.5 h-3.5 rounded-sm bg-cyan-200 border border-cyan-400" />
-                  <div className="w-3.5 h-3.5 rounded-sm bg-cyan-200 border border-cyan-400" />
-                  <span className="text-[7px] font-mono-custom font-black text-cyan-950 uppercase tracking-wider">
-                    BUFFET (COLD / DESSERT)
-                  </span>
-                  <div className="w-3.5 h-3.5 rounded-sm bg-cyan-200 border border-cyan-400" />
-                  <div className="w-3.5 h-3.5 rounded-sm bg-cyan-200 border border-cyan-400" />
-                </div>
+                {/* 9. Banquette down the right-hand wall (x:92, y:18, w:3, h:66) */}
+                <div className="absolute top-[18%] left-[92%] w-[3%] h-[66%] rounded-lg bg-cyan-200/80 border-2 border-cyan-600 pointer-events-none z-10" />
 
-                {/* Right Wall Window Banquette Seating Strip */}
-                <div className="absolute top-[20%] right-[4%] bottom-[20%] w-[2.5%] rounded-lg bg-cyan-200/80 border-2 border-cyan-600 flex flex-col items-center justify-center pointer-events-none z-10">
-                  <span className="text-[6.5px] font-mono-custom font-black text-cyan-950 uppercase [writing-mode:vertical-lr] rotate-180">
-                    WINDOW BANQUETTE
-                  </span>
-                </div>
+                {/* 10. Bench seating along bottom right (x:84, y:88, w:10, h:3) */}
+                <div className="absolute top-[88%] left-[84%] w-[10%] h-[3%] rounded-sm bg-stone-200/90 border border-stone-400 pointer-events-none z-10" />
               </>
             )}
 
             {/* ------------------------------------------------------------- */}
-            {/* HOTEL 2: IBIS CHARLIE'S CORNER & DELHI STREET ARCHITECTURE   */}
+            {/* HOTEL 2: IBIS CHARLIE'S CORNER ARCHITECTURE                  */}
             {/* ------------------------------------------------------------- */}
             {isIbis && (
               <>
-                {/* 1. Bar Prep / Kitchen Pass (Left Wing Top) */}
-                <div className="absolute top-[6%] left-[18%] w-[14%] h-[22%] rounded-xl border-2 border-stone-800 bg-stone-100/70 p-2 pointer-events-none z-10 flex flex-col justify-between">
-                  <div className="w-full h-4 rounded bg-cyan-200/90 border border-cyan-500 flex items-center justify-center">
-                    <span className="text-[6.5px] font-mono-custom font-bold text-cyan-950">BAR & PASS</span>
-                  </div>
-                  <span className="text-[7px] font-mono-custom font-extrabold text-stone-700 uppercase text-center">
-                    Kitchen / Prep
-                  </span>
+                {/* 1. Bar Prep / Kitchen Pass (Left Wing Top, x:18, y:6, w:14, h:22) */}
+                <div className="absolute top-[6%] left-[18%] w-[14%] h-[22%] rounded-xl border-2 border-stone-800 bg-stone-100/70 p-1 pointer-events-none z-10 flex flex-col justify-between">
+                  <div className="w-full h-3.5 rounded bg-cyan-200/90 border border-cyan-500" />
                 </div>
 
-                {/* Bottom-left Entrance Corridor */}
-                <div className="absolute top-[32%] left-[6%] w-[26%] h-[46%] rounded-xl border border-dashed border-stone-400 bg-stone-50/40 p-2 pointer-events-none z-0 flex flex-col justify-between">
-                  <span className="text-[7px] font-mono-custom text-stone-500 font-bold uppercase">
-                    Entrance Foyer / Corridor
-                  </span>
-                </div>
+                {/* Bottom-left Back-of-House / Entrance Foyer (x:4, y:32, w:26, h:48) */}
+                <div className="absolute top-[32%] left-[4%] w-[26%] h-[48%] rounded-xl border border-dashed border-stone-400 bg-stone-50/40 pointer-events-none z-0" />
 
-                {/* 2. Hostess Desk at Entrance Threshold */}
-                <div className="absolute top-[24%] left-[38%] w-[8%] h-[5%] rounded-md bg-stone-100 border-2 border-stone-800 flex items-center justify-center pointer-events-none z-15 shadow-xs">
+                {/* 2. Named Non-Table Feature: HOSTESS DESK (x:34, y:26, w:10, h:5) */}
+                <div className="absolute top-[26%] left-[34%] w-[10%] h-[5%] rounded-md bg-stone-100 border-2 border-stone-800 flex items-center justify-center pointer-events-none z-15 shadow-xs">
                   <span className="text-[6.5px] font-mono-custom font-black text-stone-900 uppercase tracking-wider">
-                    HOSTESS
+                    HOSTESS DESK
                   </span>
                 </div>
 
-                {/* 3. Top Buffet Counters & Front Desk */}
-                <div className="absolute top-[24%] left-[48%] w-[16%] h-[5%] rounded bg-cyan-100/90 border-2 border-cyan-500 flex items-center justify-between px-1 pointer-events-none z-10">
-                  <div className="w-3 h-3 rounded-sm bg-cyan-200 border border-cyan-400" />
-                  <span className="text-[6.5px] font-mono-custom font-black text-cyan-950 uppercase tracking-wider">
-                    BUFFET COUNTER
-                  </span>
-                  <div className="w-3 h-3 rounded-sm bg-cyan-200 border border-cyan-400" />
-                </div>
-
-                <div className="absolute top-[24%] left-[68%] w-[8%] h-[5%] rounded-md bg-stone-100 border-2 border-stone-800 flex items-center justify-center pointer-events-none z-15 shadow-xs">
+                {/* 3. Named Non-Table Feature: FRONT DESK (x:72, y:36, w:9, h:5) */}
+                <div className="absolute top-[36%] left-[72%] w-[9%] h-[5%] rounded-md bg-stone-100 border-2 border-stone-800 flex items-center justify-center pointer-events-none z-15 shadow-xs">
                   <span className="text-[6.5px] font-mono-custom font-black text-stone-900 uppercase tracking-wider">
                     FRONT DESK
                   </span>
                 </div>
 
-                {/* 4. Center Dining Grid Left & Right Vertical Dividers */}
-                <div className="absolute top-[40%] left-[44%] w-[1.2%] h-[24%] rounded bg-cyan-200/90 border border-cyan-500 flex items-center justify-center pointer-events-none z-10" />
-                <div className="absolute top-[40%] left-[67%] w-[1.2%] h-[24%] rounded bg-cyan-200/90 border border-cyan-500 flex items-center justify-center pointer-events-none z-10" />
-
-                {/* 5. Left Buffet Island (Circle + Counter) */}
-                <div className="absolute top-[52%] left-[38%] w-[5%] h-[10%] rounded-full bg-cyan-100/90 border-2 border-cyan-500 flex items-center justify-center pointer-events-none z-10">
-                  <span className="text-[6px] font-mono-custom font-bold text-cyan-950 text-center leading-none">
-                    BUFFET
-                  </span>
+                {/* 4. Top Buffet Counter (x:46, y:24, w:22, h:6) */}
+                <div className="absolute top-[24%] left-[46%] w-[22%] h-[6%] rounded bg-cyan-100/90 border-2 border-cyan-600 flex items-center justify-between px-1 pointer-events-none z-10">
+                  <div className="w-3 h-3 rounded-xs bg-cyan-200 border border-cyan-400" />
+                  <div className="w-3 h-3 rounded-xs bg-cyan-200 border border-cyan-400" />
                 </div>
 
-                {/* 6. Outdoor Smoking Terrace Region (Bottom Cyan Shaded Area with Cigarette Icon) */}
-                <div className="absolute top-[78%] left-[32%] w-[24%] h-[18%] rounded-xl bg-cyan-100/90 border-2 border-cyan-500 p-1.5 pointer-events-none z-10 shadow-md flex flex-col justify-between">
-                  <div className="flex items-center justify-between border-b border-cyan-300 pb-0.5">
-                    <div className="flex items-center gap-1 bg-cyan-600 text-white px-1 py-0.2 rounded text-[7px] font-mono-custom font-extrabold uppercase">
-                      <Cigarette size={9} />
+                {/* 5. Center Dining Dividers left & right of C/B block */}
+                <div className="absolute top-[40%] left-[44%] w-[1.2%] h-[26%] rounded bg-cyan-200/90 border border-cyan-600 pointer-events-none z-10" />
+                <div className="absolute top-[40%] left-[68%] w-[1.2%] h-[26%] rounded bg-cyan-200/90 border border-cyan-600 pointer-events-none z-10" />
+
+                {/* 6. Buffet Island / Unit left of C/B (x:38, y:48, w:6, h:12) */}
+                <div className="absolute top-[48%] left-[38%] w-[6%] h-[12%] rounded-full bg-cyan-100/90 border-2 border-cyan-600 flex items-center justify-center pointer-events-none z-10">
+                  <div className="w-3.5 h-3.5 rounded-full bg-cyan-300 border border-cyan-500" />
+                </div>
+
+                {/* 7. Outdoor Smoking Terrace along bottom (x:32, y:78, w:26, h:18) with smoking symbol and 4 blank unlabelled tables */}
+                <div className="absolute top-[78%] left-[32%] w-[26%] h-[18%] rounded-xl bg-cyan-100/90 border-2 border-cyan-600 p-1 pointer-events-none z-10 shadow-md flex flex-col justify-between">
+                  <div className="flex items-center justify-between border-b border-cyan-300/80 pb-0.5">
+                    <div className="flex items-center gap-1 text-cyan-900 px-1 py-0.2 rounded text-[7px] font-mono-custom font-extrabold uppercase">
+                      <Cigarette size={10} />
                       <span>Smoking Area</span>
                     </div>
                   </div>
-                  {/* Center Cigarette Icon Mark */}
-                  <div className="self-center flex items-center justify-center w-6 h-6 rounded-full bg-cyan-200/90 border border-cyan-400 text-cyan-900">
-                    <Cigarette size={13} />
+                  {/* 4 blank unlabelled tables (unselectable, non-seatable) */}
+                  <div className="grid grid-cols-2 gap-1 px-2 py-0.5">
+                    <div className="w-6 h-5 rounded-xs border border-cyan-500 bg-white/70 mx-auto" />
+                    <div className="w-6 h-5 rounded-xs border border-cyan-500 bg-white/70 mx-auto" />
+                    <div className="w-6 h-5 rounded-xs border border-cyan-500 bg-white/70 mx-auto" />
+                    <div className="w-6 h-5 rounded-xs border border-cyan-500 bg-white/70 mx-auto" />
                   </div>
-                  <span className="text-[6.5px] font-mono-custom font-bold text-cyan-800 text-center">
-                    Outdoor Smoking (SMK-1 ~ SMK-4)
-                  </span>
                 </div>
 
-                {/* 7. Right Wall Banquette Strip & Exterior Terrace */}
-                <div className="absolute top-[18%] left-[88%] bottom-[26%] w-[2%] rounded-lg bg-cyan-200/80 border-2 border-cyan-600 flex flex-col items-center justify-center pointer-events-none z-10">
-                  <span className="text-[6px] font-mono-custom font-black text-cyan-950 uppercase [writing-mode:vertical-lr] rotate-180">
-                    BANQUETTE
-                  </span>
+                {/* 8. Banquettes down right wall (x:88, y:18, w:2.5, h:58) */}
+                <div className="absolute top-[18%] left-[88%] w-[2.5%] h-[58%] rounded-lg bg-cyan-200/80 border-2 border-cyan-600 pointer-events-none z-10" />
+
+                {/* 9. Outside Terrace with two small tables (x:93, y:34, w:5, h:32) */}
+                <div className="absolute top-[34%] left-[93%] w-[5%] h-[32%] rounded-xl bg-stone-50/70 border-2 border-dashed border-stone-400 p-1 pointer-events-none z-10 flex flex-col items-center justify-around">
+                  <div className="w-4 h-4 rounded-full border border-stone-400 bg-stone-200" />
+                  <div className="w-4 h-4 rounded-full border border-stone-400 bg-stone-200" />
                 </div>
 
-                <div className="absolute top-[34%] left-[92%] w-[6%] h-[32%] rounded-xl bg-emerald-50/70 border-2 border-dashed border-emerald-400 p-1 pointer-events-none z-10 flex flex-col items-center justify-between">
-                  <span className="text-[7px] font-mono-custom font-extrabold text-emerald-900 uppercase">
-                    Terrace
-                  </span>
-                  <span className="text-[6px] font-mono-custom font-bold text-emerald-700 uppercase [writing-mode:vertical-lr] rotate-180">
-                    Outdoor
-                  </span>
-                </div>
+                {/* 10. Bench seating along bottom (x:62, y:92, w:26, h:3) */}
+                <div className="absolute top-[92%] left-[62%] w-[26%] h-[3%] rounded-sm bg-stone-200/90 border border-stone-400 pointer-events-none z-10" />
               </>
             )}
 

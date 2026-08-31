@@ -112,13 +112,14 @@ export interface DiningTable {
 
 export interface FloorFeature {
   id: string;
-  kind: 'buffet' | 'island' | 'bar-counter' | 'back-of-house' | 'entrance' | 'host-desk';
+  kind: 'hostess-desk' | 'front-desk' | 'coffee-stand' | 'buffet' | 'island'
+      | 'bar-counter' | 'banquette' | 'terrace' | 'smoking-terrace' | 'back-of-house';
+  /** Empty string for anything the floor plan does not label. */
   label: string;
-  x: number;      // % of plate, top-left corner
-  y: number;
-  w: number;      // % width
-  h: number;      // % height
+  x: number; y: number; w: number; h: number;
   shape?: 'rect' | 'round';
+  /** Rotate the label 90 degrees, for tall narrow units like the coffee stand. */
+  verticalLabel?: boolean;
 }
 
 export interface MealForecastItem {
