@@ -177,4 +177,77 @@ describe('Opera In-House Report Parser & Meal Rules', () => {
     expect(novotelLabel).toContain('16');
     expect(novotelLabel).not.toContain('12');
   });
+
+  it('correctly merges shared rooms: highest adults record becomes primary and sharers become accompanying', () => {
+    const headerRow = [
+      'SHARE_NAMES', 'ACCOMPANYING_NAMES', 'CURRENCY', 'COL3', 'COL4', 'RESORT', 'COL6', 'COL7',
+      'ADULTS', 'CHILDREN', 'ROOM', 'COL11', 'COMPANY_NAME', 'GUEST_NAME', 'ARRIVAL', 'DEPARTURE',
+      'RATE_CODE', 'PRODUCTS', 'VIP', 'RESV_NAME_ID', 'SPECIAL_REQUESTS', 'PREFERENCES', 'IS_SHARED_YN',
+      'RES_COMMENT_1', 'RES_COMMENT_2', 'RES_COMMENT_3', 'RES_COMMENT_4', 'RES_COMMENT_5', 'RES_COMMENT_6'
+    ].join('\t');
+
+    // Primary record (2 adults) appears first
+    const record1 = [
+      'Sharer One / Sharer Two', '', 'THB', '0', '173', 'HB4F8', 'N', 'N',
+      '2', '0', '305', '3', 'Global Travel', 'Primary Master', '28-AUG-26', '30-AUG-26',
+      'BB', 'BF', '', 'RES-305-1', '', '', 'Y',
+      '', '', '', '', '', ''
+    ].join('\t');
+
+    // Sharer 1 record (0 adults) appears second
+    const record2 = [
+      '', '', 'THB', '0', '173', 'HB4F8', 'N', 'N',
+      '0', '0', '305', '3', 'Global Travel', 'Sharer One', '28-AUG-26', '30-AUG-26',
+      'BB', 'BF', '', 'RES-305-2', '', '', 'Y',
+      '', '', '', '', '', ''
+    ].join('\t');
+
+    // Sharer 2 record (0 adults) appears third
+    const record3 = [
+      '', '', 'THB', '0', '173', 'HB4F8', 'N', 'N',
+      '0', '0', '305', '3', 'Global Travel', 'Sharer Two', '28-AUG-26', '30-AUG-26',
+      'BB', 'BF', '', 'RES-305-3', '', '', 'Y',
+      '', '', '', '', '', ''
+    ].join('\t');
+
+    const fixture = [headerRow, record1, record2, record3].join('\n');
+    const result = parseInHouseReport(fixture, 'novotel');
+
+    const room305 = result.rooms.find((r) => r.roomNumber === '305');
+    expect(room305).toBeDefined();
+    expect(room305?.roomNumber).toBe('305');
+    expect(room305?.adults).toBe(2);
+    expect(room305?.guestName).toBe('Primary Master');
+    expect(room305?.accompanyingGuests).toContain('Sharer One');
+    expect(room305?.accompanyingGuests).toContain('Sharer Two');
+    expect(room305?.accompanyingGuests).not.toContain('Primary Master');
+  });
+
+  it('preserves blank-details rooms (e.g. Room 118) with issueType: "no-details" rather than silently skipping', () => {
+    const headerRow = [
+      'SHARE_NAMES', 'ACCOMPANYING_NAMES', 'CURRENCY', 'COL3', 'COL4', 'RESORT', 'COL6', 'COL7',
+      'ADULTS', 'CHILDREN', 'ROOM', 'COL11', 'COMPANY_NAME', 'GUEST_NAME', 'ARRIVAL', 'DEPARTURE',
+      'RATE_CODE', 'PRODUCTS', 'VIP', 'RESV_NAME_ID', 'SPECIAL_REQUESTS', 'PREFERENCES', 'IS_SHARED_YN',
+      'RES_COMMENT_1', 'RES_COMMENT_2', 'RES_COMMENT_3', 'RES_COMMENT_4', 'RES_COMMENT_5', 'RES_COMMENT_6'
+    ].join('\t');
+
+    // Room 118 has room number but no guest name or dates
+    const blankRoomRow = [
+      '', '', 'THB', '0', '173', 'HB4F8', 'N', 'N',
+      '0', '0', '118', '3', '', '', '', '',
+      '', '', '', '', '', '', 'N',
+      '', '', '', '', '', ''
+    ].join('\t');
+
+    const fixture = [headerRow, blankRoomRow].join('\n');
+    const result = parseInHouseReport(fixture, 'novotel');
+
+    const room118 = result.rooms.find((r) => r.roomNumber === '118');
+    expect(room118).toBeDefined();
+    expect(room118?.roomNumber).toBe('118');
+    expect(room118?.guestName).toBe('RESERVED / NO DETAILS');
+    expect(room118?.adults).toBe(0);
+    expect(room118?.issueType).toBe('no-details');
+    expect(result.anomalies.some((a) => a.roomNumber === '118' && a.type === 'no-details')).toBe(true);
+  });
 });

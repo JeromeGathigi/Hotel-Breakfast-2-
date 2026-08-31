@@ -21,7 +21,7 @@ export interface Guest {
   accompanyingGuests?: string[];
   vipStatus?: string | null;
   vipLevel?: string | null;
-  issueType?: 'no-adults' | 'over-capacity' | 'unentitled' | null;
+  issueType?: 'no-adults' | 'over-capacity' | 'unentitled' | 'no-details' | null;
   hotelId: string;
   companyName?: string;
   blockCode?: string;
@@ -36,6 +36,7 @@ export interface Guest {
   totalPackages?: number;
   lastUpdated?: string;
   assignedTable?: string | null;
+  assignedTableId?: string | null;
   checkedInPax?: number; // total pax checked in so far
   checkedInGuests?: Array<{
     name: string;
@@ -57,11 +58,14 @@ export interface CheckIn {
   infantsAte: number;
   recordedBy: string;
   tableNumber?: string | null;
+  tableId?: string | null;
   overCapacityReasonCodes?: string[];
   overCapacityReasons?: string[];
   overCapacityOtherReason?: string;
   authorizingStaff?: string;
   checkedGuestNames?: string[];
+  isSynthetic?: boolean;
+  syntheticSource?: string;
   history?: Array<{
     timestamp: string;
     adultsAte: number;
@@ -90,7 +94,7 @@ export interface DiningTable {
   id: string;
   tableNumber: string;
   capacity: number;
-  zone: 'Main Dining' | 'Terrace' | 'VIP Alcove' | 'Window Booths' | 'Bar Counter' | 'Delhi Street' | "Charlie's Bar" | string;
+  zone: 'Main Dining' | 'Gourmet Bar' | 'Window Booths' | 'Wall Banquette' | 'Terrace' | 'Smoking Terrace' | 'VIP Alcove' | 'Bar Counter' | 'Delhi Street' | "Charlie's Bar" | string;
   status: 'available' | 'occupied' | 'reserved' | 'cleaning';
   occupiedByRoom?: string | null;
   occupiedByGuest?: string | null;
@@ -99,6 +103,22 @@ export interface DiningTable {
   mealService?: MealServiceType;
   x?: number; // for visual map grid (0-100%)
   y?: number;
+  shape?: 'rectangle' | 'square' | 'round' | 'booth' | 'diamond' | 'bar_seat' | 'lounge' | 'semi_circle';
+  width?: number;
+  height?: number;
+  rotation?: number;
+  isSmoking?: boolean;
+}
+
+export interface FloorFeature {
+  id: string;
+  kind: 'buffet' | 'island' | 'bar-counter' | 'back-of-house' | 'entrance' | 'host-desk';
+  label: string;
+  x: number;      // % of plate, top-left corner
+  y: number;
+  w: number;      // % width
+  h: number;      // % height
+  shape?: 'rect' | 'round';
 }
 
 export interface MealForecastItem {
@@ -116,6 +136,8 @@ export interface MealForecastItem {
   childrenInHouse?: number;
   arrivalRooms?: number;
   departureRooms?: number;
+  isSynthetic?: boolean;
+  syntheticSource?: string;
 }
 
 export interface ReportMetadata {
@@ -154,4 +176,6 @@ export interface DailySummary {
   };
   peakHour?: string;
   updatedAt?: string;
+  isSynthetic?: boolean;
+  syntheticSource?: string;
 }

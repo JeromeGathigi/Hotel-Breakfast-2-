@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   db, 
   collection, 
+  getDocs,
   onSnapshot, 
   doc, 
   setDoc, 
@@ -12,6 +13,7 @@ import {
 import { DiningTable, MealServiceType, Guest } from '../types';
 import { DEFAULT_NOVOTEL_TABLES, DEFAULT_IBIS_TABLES } from '../constants';
 import { TableCardSkeleton } from './Skeleton';
+import { RestaurantFloorPlan2D } from './RestaurantFloorPlan2D';
 import { 
   Users, 
   Plus, 
@@ -23,7 +25,10 @@ import {
   X, 
   SlidersHorizontal,
   ChevronRight,
-  Check
+  Check,
+  LayoutGrid,
+  Map as MapIcon,
+  Cigarette
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -36,10 +41,12 @@ interface SeatingPlanProps {
 export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, activeMealService }) => {
   const [tables, setTables] = useState<DiningTable[]>([]);
   const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState<'blueprint' | 'grid'>('blueprint');
   const [selectedZone, setSelectedZone] = useState<string>('All');
   const [selectedTable, setSelectedTable] = useState<DiningTable | null>(null);
   const [isEditLayoutOpen, setIsEditLayoutOpen] = useState(false);
   const [editingTable, setEditingTable] = useState<Partial<DiningTable> | null>(null);
+  const [searchFilter, setSearchFilter] = useState('');
   const [searchGuestRoom, setSearchGuestRoom] = useState('');
   const [inHouseGuests, setInHouseGuests] = useState<Guest[]>([]);
   const [assignModalOpen, setAssignModalOpen] = useState(false);
@@ -85,11 +92,23 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
     };
   }, [hotelId]);
 
-  const zones = ['All', 'Main Dining', 'Terrace', 'VIP Alcove', 'Window Booths', 'Bar Counter'];
+  // Dynamic zones derived from loaded tables with 'All' first
+  const zones = useMemo(() => {
+    const distinct = Array.from(new Set(tables.map((t) => t.zone).filter(Boolean)));
+    return ['All', ...distinct];
+  }, [tables]);
 
   const filteredTables = tables.filter((t) => {
-    if (selectedZone === 'All') return true;
-    return t.zone === selectedZone;
+    if (selectedZone !== 'All' && t.zone !== selectedZone) return false;
+    if (searchFilter.trim() !== '') {
+      const q = searchFilter.toLowerCase();
+      const matchNum = t.tableNumber.toLowerCase().includes(q);
+      const matchRoom = t.occupiedByRoom?.toLowerCase().includes(q);
+      const matchGuest = t.occupiedByGuest?.toLowerCase().includes(q);
+      const matchZone = t.zone.toLowerCase().includes(q);
+      return matchNum || matchRoom || matchGuest || matchZone;
+    }
+    return true;
   });
 
   const occupiedCount = tables.filter((t) => t.status === 'occupied').length;
@@ -121,15 +140,30 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
       );
 
       if (selectedTable?.id === table.id) {
-        setSelectedTable(null);
+        setSelectedTable((prev) => prev ? { ...prev, status: newStatus } : null);
       }
     } catch (err) {
       console.error('Failed to update table status:', err);
     }
   };
 
+  const handleQuickSeat = (table: DiningTable) => {
+    setSelectedTable(table);
+    setAssignPax(table.capacity);
+    setAssignModalOpen(true);
+  };
+
   const handleAssignGuest = async (guest: Guest) => {
     if (!selectedTable) return;
+
+    // Prompt confirmation if seating guest in smoking area
+    if (selectedTable.zone === 'Smoking Terrace' || selectedTable.isSmoking) {
+      const confirmedSmoking = window.confirm(
+        `${selectedTable.tableNumber} is on the outdoor smoking terrace. Seat this party there?`
+      );
+      if (!confirmedSmoking) return;
+    }
+
     try {
       const tableRef = doc(db, 'hotels', hotelId, 'tables', selectedTable.id);
       const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -149,7 +183,7 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
         `Seated Room ${guest.roomNumber} (${guest.guestName}) at Table ${selectedTable.tableNumber} (${assignPax} pax for ${activeMealService})`,
         guest.roomNumber,
         guest.guestName,
-        { tableNumber: selectedTable.tableNumber, pax: assignPax, mealService: activeMealService }
+        { tableId: selectedTable.id, tableNumber: selectedTable.tableNumber, pax: assignPax, mealService: activeMealService }
       );
 
       setAssignModalOpen(false);
@@ -170,10 +204,12 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
         id: tableId,
         tableNumber: editingTable.tableNumber.trim().toUpperCase(),
         capacity: Number(editingTable.capacity) || 2,
-        zone: (editingTable.zone as any) || 'Main Dining',
+        zone: (editingTable.zone as any) || (hotelId === 'ibis' ? 'Delhi Street' : 'Main Dining'),
         status: (editingTable.status as any) || 'available',
-        x: editingTable.x || 30,
-        y: editingTable.y || 30,
+        x: editingTable.x || 40,
+        y: editingTable.y || 40,
+        shape: (editingTable.shape as any) || 'square',
+        isSmoking: Boolean(editingTable.isSmoking),
       };
 
       await setDoc(doc(db, 'hotels', hotelId, 'tables', tableId), newTable);
@@ -202,14 +238,37 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
   };
 
   const handleResetDefaultLayout = async () => {
-    const restaurantName = hotelId === 'ibis' ? "Delhi Street & Charlie's Corner" : 'Food Exchange';
-    if (!confirm(`Reset ${restaurantName} seating plan to default preset?`)) return;
+    const occupiedTables = tables.filter((t) => t.status === 'occupied');
+    if (occupiedTables.length > 0) {
+      alert(
+        `Cannot reset layout while tables are occupied: ${occupiedTables.map((t) => t.tableNumber).join(', ')}. Please clear or complete service for all seated guests first.`
+      );
+      return;
+    }
+
+    const input = window.prompt(
+      `Type "${hotelId}" to confirm resetting the floor plan to the exact architectural defaults:`
+    );
+    if (!input || input.trim().toLowerCase() !== hotelId.toLowerCase()) {
+      return;
+    }
+
     try {
+      const snap = await getDocs(collection(db, 'hotels', hotelId, 'tables'));
+      if (snap && snap.docs) {
+        for (const d of snap.docs) {
+          await deleteDoc(doc(db, 'hotels', hotelId, 'tables', d.id));
+        }
+      }
       const defaults = hotelId === 'ibis' ? DEFAULT_IBIS_TABLES : DEFAULT_NOVOTEL_TABLES;
       for (const t of defaults) {
         await setDoc(doc(db, 'hotels', hotelId, 'tables', t.id), t);
       }
-      await logOperaAuditTrail(hotelId, 'TABLE_LAYOUT_UPDATE', `Reset floor plan to default property layout`);
+      await logOperaAuditTrail(
+        hotelId,
+        'TABLE_LAYOUT_UPDATE',
+        `Reset floor plan to default blueprint layout (${hotelId})`
+      );
       setIsEditLayoutOpen(false);
     } catch (err) {
       console.error('Failed to reset layout:', err);
@@ -224,9 +283,9 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
 
   return (
     <div className="space-y-6">
-      {/* Header & Controls */}
+      {/* Header & Host Stand Controls */}
       <div className="bg-white rounded-2xl p-6 border border-border shadow-luxury">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
               <span className="label-mono text-accent">Restaurant Host Stand</span>
@@ -236,18 +295,66 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
               </span>
             </div>
             <h2 className="text-2xl font-bold font-display text-foreground mt-1 tracking-tight">
-              {hotelId === 'ibis' ? "Delhi Street & Charlie's Corner Floor Plan" : 'Food Exchange Dining & Terrace'}
+              {hotelId === 'ibis' ? "Charlie's Corner & Delhi Street Floor Plan" : 'Food Exchange & Gourmet Bar Floor Plan'}
             </h2>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Real-time table occupancy, guest seating allocation, and dining room capacity management.
+              Interactive architectural seating blueprint, live guest table allocation, and host stand capacity.
             </p>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
+          {/* View Mode & Actions */}
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* View Mode Switcher */}
+            <div className="flex items-center bg-[#F2EBE4]/60 p-1 rounded-xl border border-border">
+              <button
+                onClick={() => setViewMode('blueprint')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-mono-custom font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  viewMode === 'blueprint'
+                    ? 'bg-white text-black shadow-xs border border-black/10'
+                    : 'text-muted-foreground hover:text-black'
+                }`}
+              >
+                <MapIcon size={14} className={viewMode === 'blueprint' ? 'text-accent' : ''} />
+                <span>2D Floor Plan</span>
+              </button>
+
+              <button
+                onClick={() => setViewMode('grid')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-mono-custom font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  viewMode === 'grid'
+                    ? 'bg-white text-black shadow-xs border border-black/10'
+                    : 'text-muted-foreground hover:text-black'
+                }`}
+              >
+                <LayoutGrid size={14} className={viewMode === 'grid' ? 'text-accent' : ''} />
+                <span>Cards Grid</span>
+              </button>
+            </div>
+
+            {/* Quick Search */}
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="Search table, room #, guest..."
+                value={searchFilter}
+                onChange={(e) => setSearchFilter(e.target.value)}
+                className="pl-8 pr-3 py-2 rounded-xl border border-border bg-white text-foreground text-xs font-mono-custom placeholder:text-muted-foreground focus:outline-none focus:border-accent w-[200px] sm:w-[240px]"
+              />
+              {searchFilter && (
+                <button
+                  onClick={() => setSearchFilter('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+
             {isAdmin && (
               <button
                 onClick={() => setIsEditLayoutOpen(true)}
-                className="px-4 py-2 rounded-xl border border-border bg-white hover:bg-[#F2EBE4]/50 text-foreground font-mono-custom font-medium text-xs flex items-center gap-2 transition-all shadow-xs"
+                className="px-4 py-2 rounded-xl border border-border bg-white hover:bg-[#F2EBE4]/50 text-foreground font-mono-custom font-medium text-xs flex items-center gap-2 transition-all shadow-xs cursor-pointer"
               >
                 <SlidersHorizontal size={13} className="text-accent" />
                 Floor Plan Editor
@@ -324,17 +431,29 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
         })}
       </div>
 
-      {/* Floor Plan Cards */}
+      {/* Main View: 2D Blueprint Floor Plan or Cards Grid */}
       {loading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
           {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((idx) => (
             <TableCardSkeleton key={idx} />
           ))}
         </div>
+      ) : viewMode === 'blueprint' ? (
+        <RestaurantFloorPlan2D
+          hotelId={hotelId}
+          tables={tables}
+          activeMealService={activeMealService}
+          selectedZone={selectedZone}
+          selectedTable={selectedTable}
+          highlightQuery={searchFilter}
+          onSelectTable={(table) => setSelectedTable(table)}
+          onQuickSeat={(table) => handleQuickSeat(table)}
+          onUpdateStatus={(table, status) => handleUpdateStatus(table, status)}
+        />
       ) : filteredTables.length === 0 ? (
         <div className="bg-white rounded-2xl p-12 border border-border text-center shadow-luxury">
           <p className="text-sm font-medium text-muted-foreground font-sans">
-            No tables configured in {selectedZone} zone.
+            No tables matching your current filter.
           </p>
         </div>
       ) : (
@@ -429,12 +548,17 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
                     <span className="room-badge-luxury">
                       {selectedTable.capacity} Seats
                     </span>
+                    {selectedTable.isSmoking && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono-custom font-bold bg-cyan-100 text-cyan-800">
+                        <Cigarette size={10} /> Smoking
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs font-mono-custom text-muted-foreground mt-0.5">{selectedTable.zone}</p>
                 </div>
                 <button
                   onClick={() => setSelectedTable(null)}
-                  className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-[#F2EBE4]/60 transition-all"
+                  className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-[#F2EBE4]/60 transition-all cursor-pointer"
                 >
                   <X size={18} />
                 </button>
@@ -446,7 +570,7 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     onClick={() => handleUpdateStatus(selectedTable, 'available')}
-                    className={`p-2.5 rounded-xl text-xs font-mono-custom font-medium border transition-all flex items-center justify-between ${
+                    className={`p-2.5 rounded-xl text-xs font-mono-custom font-medium border transition-all flex items-center justify-between cursor-pointer ${
                       selectedTable.status === 'available'
                         ? 'border-emerald-500 bg-emerald-50 text-emerald-800'
                         : 'border-border text-muted-foreground hover:bg-[#F2EBE4]/40'
@@ -458,7 +582,7 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
 
                   <button
                     onClick={() => handleUpdateStatus(selectedTable, 'occupied')}
-                    className={`p-2.5 rounded-xl text-xs font-mono-custom font-medium border transition-all flex items-center justify-between ${
+                    className={`p-2.5 rounded-xl text-xs font-mono-custom font-medium border transition-all flex items-center justify-between cursor-pointer ${
                       selectedTable.status === 'occupied'
                         ? 'border-accent bg-accent/10 text-accent font-semibold'
                         : 'border-border text-muted-foreground hover:bg-[#F2EBE4]/40'
@@ -470,7 +594,7 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
 
                   <button
                     onClick={() => handleUpdateStatus(selectedTable, 'reserved')}
-                    className={`p-2.5 rounded-xl text-xs font-mono-custom font-medium border transition-all flex items-center justify-between ${
+                    className={`p-2.5 rounded-xl text-xs font-mono-custom font-medium border transition-all flex items-center justify-between cursor-pointer ${
                       selectedTable.status === 'reserved'
                         ? 'border-amber-500 bg-amber-50 text-amber-800 font-semibold'
                         : 'border-border text-muted-foreground hover:bg-[#F2EBE4]/40'
@@ -482,7 +606,7 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
 
                   <button
                     onClick={() => handleUpdateStatus(selectedTable, 'cleaning')}
-                    className={`p-2.5 rounded-xl text-xs font-mono-custom font-medium border transition-all flex items-center justify-between ${
+                    className={`p-2.5 rounded-xl text-xs font-mono-custom font-medium border transition-all flex items-center justify-between cursor-pointer ${
                       selectedTable.status === 'cleaning'
                         ? 'border-slate-400 bg-slate-100 text-slate-700'
                         : 'border-border text-muted-foreground hover:bg-[#F2EBE4]/40'
@@ -625,15 +749,15 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
               <div className="flex items-start justify-between border-b border-border pb-4">
                 <div>
                   <h3 className="text-2xl font-bold font-display text-foreground">
-                    {hotelId === 'ibis' ? 'ibis Kitchen' : 'Food Exchange'} Floor Plan Setup
+                    {hotelId === 'ibis' ? "Charlie's Corner & Delhi Street" : 'Food Exchange & Gourmet Bar'} Floor Plan Setup
                   </h3>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Add tables, configure capacities, or modify restaurant dining zones.
+                    Add tables, configure capacities, shapes, or modify restaurant dining zones.
                   </p>
                 </div>
                 <button
                   onClick={() => setIsEditLayoutOpen(false)}
-                  className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-[#F2EBE4]/60"
+                  className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-[#F2EBE4]/60 cursor-pointer"
                 >
                   <X size={18} />
                 </button>
@@ -645,13 +769,13 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
                   {editingTable?.id ? `Edit Table ${editingTable.tableNumber}` : 'Add New Dining Table'}
                 </p>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                   <div>
                     <label className="label-mono">Table Number</label>
                     <input
                       type="text"
                       required
-                      placeholder="e.g. T-12"
+                      placeholder="e.g. GB-01 / DS-06"
                       value={editingTable?.tableNumber || ''}
                       onChange={(e) => setEditingTable((prev) => ({ ...prev, tableNumber: e.target.value }))}
                       className="w-full mt-1 px-3 py-2 rounded-xl border border-border bg-white text-foreground text-xs font-mono-custom uppercase focus:outline-none focus:border-accent"
@@ -659,7 +783,7 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
                   </div>
 
                   <div>
-                    <label className="label-mono">Seat Capacity</label>
+                    <label className="label-mono">Capacity</label>
                     <input
                       type="number"
                       min="1"
@@ -672,34 +796,64 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
                   </div>
 
                   <div>
+                    <label className="label-mono">Table Shape</label>
+                    <select
+                      value={editingTable?.shape || 'square'}
+                      onChange={(e) => setEditingTable((prev) => ({ ...prev, shape: e.target.value as any }))}
+                      className="w-full mt-1 px-3 py-2 rounded-xl border border-border bg-white text-foreground text-xs font-mono-custom focus:outline-none focus:border-accent"
+                    >
+                      <option value="square">Square 4-Top</option>
+                      <option value="diamond">Diamond (Gourmet Bar)</option>
+                      <option value="round">Round Table</option>
+                      <option value="rectangle">Rectangle (Long)</option>
+                      <option value="booth">Window Booth</option>
+                      <option value="semi_circle">Semi-Circle Lounge</option>
+                      <option value="bar_seat">Bar Stool</option>
+                    </select>
+                  </div>
+
+                  <div>
                     <label className="label-mono">Dining Zone</label>
                     <select
-                      value={editingTable?.zone || 'Main Dining'}
+                      value={editingTable?.zone || (hotelId === 'ibis' ? 'Delhi Street' : 'Main Dining')}
                       onChange={(e) => setEditingTable((prev) => ({ ...prev, zone: e.target.value as any }))}
                       className="w-full mt-1 px-3 py-2 rounded-xl border border-border bg-white text-foreground text-xs font-mono-custom focus:outline-none focus:border-accent"
                     >
-                      <option value="Main Dining">Main Dining</option>
-                      <option value="Terrace">Terrace</option>
-                      <option value="VIP Alcove">VIP Alcove</option>
-                      <option value="Window Booths">Window Booths</option>
-                      <option value="Bar Counter">Bar Counter</option>
+                      {zones.filter((z) => z !== 'All').map((z) => (
+                        <option key={z} value={z}>{z}</option>
+                      ))}
                     </select>
                   </div>
                 </div>
+
+                {/* Smoking Toggle */}
+                {hotelId === 'ibis' && (
+                  <div className="flex items-center gap-2 pt-1">
+                    <label className="flex items-center gap-2 text-xs font-mono-custom cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(editingTable?.isSmoking)}
+                        onChange={(e) => setEditingTable((prev) => ({ ...prev, isSmoking: e.target.checked }))}
+                        className="rounded border-border text-accent focus:ring-accent w-4 h-4 cursor-pointer"
+                      />
+                      <span>Designated Smoking Table (Terrace)</span>
+                    </label>
+                  </div>
+                )}
 
                 <div className="flex items-center justify-end gap-2 pt-2">
                   {editingTable && (
                     <button
                       type="button"
                       onClick={() => setEditingTable(null)}
-                      className="px-3 py-1.5 rounded-xl border border-border text-xs font-mono-custom text-muted-foreground hover:bg-white"
+                      className="px-3 py-1.5 rounded-xl border border-border text-xs font-mono-custom text-muted-foreground hover:bg-white cursor-pointer"
                     >
                       Cancel
                     </button>
                   )}
                   <button
                     type="submit"
-                    className="px-4 py-2 rounded-xl bg-accent text-white font-mono-custom text-xs flex items-center gap-1.5 hover:bg-accent-hover shadow-xs"
+                    className="px-4 py-2 rounded-xl bg-accent text-white font-mono-custom text-xs flex items-center gap-1.5 hover:bg-accent-hover shadow-xs cursor-pointer"
                   >
                     <Plus size={13} />
                     {editingTable?.id ? 'Update Table' : 'Save Table'}
@@ -714,9 +868,9 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
                   <button
                     type="button"
                     onClick={handleResetDefaultLayout}
-                    className="text-xs font-mono-custom text-rose-600 hover:underline flex items-center gap-1"
+                    className="text-xs font-mono-custom text-rose-600 hover:underline flex items-center gap-1 cursor-pointer"
                   >
-                    <RotateCcw size={12} /> Reset to Defaults
+                    <RotateCcw size={12} /> Reset to Blueprint Preset
                   </button>
                 </div>
 
@@ -726,6 +880,7 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
                       <tr>
                         <th className="p-3">Table #</th>
                         <th className="p-3">Zone</th>
+                        <th className="p-3">Shape</th>
                         <th className="p-3">Capacity</th>
                         <th className="p-3">Status</th>
                         <th className="p-3 text-right">Actions</th>
@@ -734,8 +889,12 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
                     <tbody className="divide-y divide-border">
                       {tables.map((t) => (
                         <tr key={t.id} className="hover:bg-[#F2EBE4]/30">
-                          <td className="p-3 font-mono-custom font-bold text-foreground">{t.tableNumber}</td>
+                          <td className="p-3 font-mono-custom font-bold text-foreground flex items-center gap-1.5">
+                            {t.tableNumber}
+                            {t.isSmoking && <Cigarette size={12} className="text-cyan-700" title="Smoking" />}
+                          </td>
                           <td className="p-3 text-muted-foreground">{t.zone}</td>
+                          <td className="p-3 text-muted-foreground capitalize font-mono-custom text-[11px]">{t.shape || 'Standard'}</td>
                           <td className="p-3 font-mono-custom text-foreground">{t.capacity} Pax</td>
                           <td className="p-3">
                             <span className="room-badge-luxury text-[9px]">
@@ -746,14 +905,14 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
                             <div className="flex items-center justify-end gap-1">
                               <button
                                 onClick={() => setEditingTable(t)}
-                                className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-white"
+                                className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-white cursor-pointer"
                                 title="Edit"
                               >
                                 <Edit2 size={12} />
                               </button>
                               <button
                                 onClick={() => handleDeleteTable(t.id, t.tableNumber)}
-                                className="p-1.5 rounded-lg border border-border text-rose-600 hover:bg-rose-50"
+                                className="p-1.5 rounded-lg border border-border text-rose-600 hover:bg-rose-50 cursor-pointer"
                                 title="Delete"
                               >
                                 <Trash2 size={12} />
@@ -773,3 +932,4 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
     </div>
   );
 };
+

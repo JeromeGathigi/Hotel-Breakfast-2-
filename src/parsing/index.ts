@@ -3,7 +3,7 @@ import { Guest, MealForecastItem } from '../types';
 export interface Anomaly {
   roomNumber: string;
   guestName: string;
-  type: 'no-adults' | 'over-capacity' | 'unentitled' | 'missing-dates';
+  type: 'no-adults' | 'over-capacity' | 'unentitled' | 'missing-dates' | 'no-details' | 'corrupted-record';
   message: string;
 }
 
@@ -152,7 +152,7 @@ export function parseInHouseReport(rawText: string, defaultHotelId: string = 'no
       anomalies.push({
         roomNumber: 'CORRUPTED',
         guestName: 'Corrupted record',
-        type: 'over-capacity',
+        type: 'corrupted-record',
         message: `Record with ${cells.length} fields exceeded header field count of ${headers.length}. Discarded.`,
       });
       continue;
@@ -209,22 +209,32 @@ export function parseInHouseReport(rawText: string, defaultHotelId: string = 'no
       });
 
       const rawRoom = (rowObj['ROOM'] || rowObj['ROOM1'] || '').trim();
-      const guestName = (rowObj['GUEST_NAME'] || rowObj['FULL_NAME'] || rowObj['DISPLAY_NAME'] || '').trim();
-      if (!guestName || guestName.startsWith('LOGO') || guestName.startsWith('SUM_')) continue;
+      const rawGuestName = (rowObj['GUEST_NAME'] || rowObj['FULL_NAME'] || rowObj['DISPLAY_NAME'] || '').trim();
 
+      // Skip layout artefacts
+      if (rawGuestName.startsWith('LOGO') || rawGuestName.startsWith('SUM_')) {
+        continue;
+      }
+
+      // If no room number is available, report missing-dates/missing-room anomaly if there's a guest name
       if (!rawRoom) {
-        anomalies.push({
-          roomNumber: 'MISSING',
-          guestName,
-          type: 'missing-dates',
-          message: `Guest "${guestName}" has no assigned room number in Opera export.`,
-        });
+        if (rawGuestName) {
+          anomalies.push({
+            roomNumber: 'MISSING',
+            guestName: rawGuestName,
+            type: 'missing-dates',
+            message: `Guest "${rawGuestName}" has no assigned room number in Opera export.`,
+          });
+        }
         continue;
       }
 
       const roomNum = rawRoom;
-      const adults = parseInt(rowObj['ADULTS'] || rowObj['ADULTS1'] || '0', 10) || 0;
-      const children = parseInt(rowObj['CHILDREN'] || rowObj['CHILDREN1'] || '0', 10) || 0;
+      const isBlankDetails = !rawGuestName;
+      const guestName = isBlankDetails ? 'RESERVED / NO DETAILS' : rawGuestName;
+
+      const adults = isBlankDetails ? 0 : parseInt(rowObj['ADULTS'] || rowObj['ADULTS1'] || '0', 10) || 0;
+      const children = isBlankDetails ? 0 : parseInt(rowObj['CHILDREN'] || rowObj['CHILDREN1'] || '0', 10) || 0;
       const arrival = formatOperaDateToIso(rowObj['ARRIVAL'] || rowObj['TRUNC_ARRIVAL'] || rowObj['STAY_DATE1'] || '');
       const departure = formatOperaDateToIso(rowObj['DEPARTURE'] || rowObj['TRUNC_DEPARTURE'] || '');
       const rateCode = rowObj['RATE_CODE'] || '';
@@ -244,55 +254,130 @@ export function parseInHouseReport(rawText: string, defaultHotelId: string = 'no
       } else if (rowObj['PACKAGES']) {
         mealPlan = rowObj['PACKAGES'];
       }
+      if (isBlankDetails && !mealPlan) {
+        mealPlan = 'Room Only (No Details)';
+      }
 
-      const isShare = rowObj['IS_SHARED_YN'] === 'Y';
-      const accompanying = (rowObj['ACCOMPANYING_NAMES'] || rowObj['SHARE_NAMES'] || '')
+      // Read SHARE_NAMES first, then fall back to ACCOMPANYING_NAMES
+      const rawAccompanying = rowObj['SHARE_NAMES'] || rowObj['ACCOMPANYING_NAMES'] || '';
+      const accompanyingList = rawAccompanying
         .split('/')
         .map((s) => s.trim())
         .filter(Boolean);
 
-      // Check anomalies
-      let issueType: Guest['issueType'] = null;
-      if (adults === 0) {
-        issueType = 'no-adults';
-        anomalies.push({
-          roomNumber: roomNum,
-          guestName,
-          type: 'no-adults',
-          message: `Room ${roomNum} (${guestName}) has 0 adults registered.`,
-        });
-      }
+      const nameKey = (n: string) => n.trim().toLowerCase();
+
+      // Helper to merge and deduplicate accompanying guests case-insensitively
+      const buildDeduplicatedAccompanying = (primaryName: string, candidates: string[]): string[] => {
+        const primaryK = nameKey(primaryName);
+        const seen = new Set<string>();
+        const result: string[] = [];
+        for (const name of candidates) {
+          const trimmed = name.trim();
+          const k = nameKey(trimmed);
+          if (k && k !== primaryK && !seen.has(k) && trimmed !== 'RESERVED / NO DETAILS') {
+            seen.add(k);
+            result.push(trimmed);
+          }
+        }
+        return result;
+      };
 
       const existingGuest = roomsMap.get(roomNum);
-      if (existingGuest && !isShare) {
-        existingGuest.accompanyingGuests = Array.from(
-          new Set([...(existingGuest.accompanyingGuests || []), guestName])
-        );
-        if (adults > 0 && existingGuest.adults === 0) {
-          existingGuest.adults = adults;
-        }
-      } else {
-        roomsMap.set(roomNum, {
+
+      if (!existingGuest) {
+        // Room not yet in map -> insert
+        const guestObj: Guest = {
           roomNumber: roomNum,
           guestName,
-          arrivalDate: arrival || '2026-08-28',
-          departureDate: departure || '2026-08-30',
+          arrivalDate: arrival,
+          departureDate: departure,
           mealPlan: mealPlan || 'Room & Breakfast (RB)',
           adults,
           children,
           resvNameId,
-          accompanyingGuests: accompanying,
+          accompanyingGuests: buildDeduplicatedAccompanying(guestName, accompanyingList),
           vipStatus: vip,
           vipLevel: vip,
-          issueType,
+          issueType: isBlankDetails ? 'no-details' : null,
           hotelId: rowHotel,
           companyName: company,
           rateCode,
           specialRequests: specialReq,
           preferences,
           lastUpdated: new Date().toISOString(),
-        });
+        };
+        roomsMap.set(roomNum, guestObj);
+      } else {
+        // Room already in map -> merge without depending on IS_SHARED_YN
+        if (adults > existingGuest.adults) {
+          // This record becomes primary!
+          const oldPrimary = existingGuest.guestName;
+          const combinedAccompanying = [
+            ...(existingGuest.accompanyingGuests || []),
+            oldPrimary,
+            ...accompanyingList,
+          ];
+
+          existingGuest.guestName = guestName;
+          existingGuest.adults = adults;
+          existingGuest.children = children;
+          existingGuest.rateCode = rateCode || existingGuest.rateCode;
+          existingGuest.mealPlan = mealPlan || existingGuest.mealPlan;
+          existingGuest.arrivalDate = arrival || existingGuest.arrivalDate;
+          existingGuest.departureDate = departure || existingGuest.departureDate;
+          existingGuest.vipStatus = vip || existingGuest.vipStatus;
+          existingGuest.vipLevel = vip || existingGuest.vipLevel;
+          existingGuest.resvNameId = resvNameId || existingGuest.resvNameId;
+          existingGuest.companyName = company || existingGuest.companyName;
+          existingGuest.specialRequests = specialReq || existingGuest.specialRequests;
+          existingGuest.preferences = preferences || existingGuest.preferences;
+          existingGuest.lastUpdated = new Date().toISOString();
+          if (isBlankDetails) {
+            existingGuest.issueType = 'no-details';
+          } else {
+            existingGuest.issueType = null;
+          }
+          existingGuest.accompanyingGuests = buildDeduplicatedAccompanying(guestName, combinedAccompanying);
+        } else {
+          // Keep stored primary, add this record's guestName and accompanying names
+          const combinedAccompanying = [
+            ...(existingGuest.accompanyingGuests || []),
+            guestName,
+            ...accompanyingList,
+          ];
+          existingGuest.accompanyingGuests = buildDeduplicatedAccompanying(existingGuest.guestName, combinedAccompanying);
+          existingGuest.lastUpdated = new Date().toISOString();
+        }
       }
+    }
+  }
+
+  // POST-PASS: Raise anomalies per room once roomsMap is fully merged
+  for (const room of roomsMap.values()) {
+    if (room.guestName === 'RESERVED / NO DETAILS' || room.issueType === 'no-details') {
+      room.issueType = 'no-details';
+      anomalies.push({
+        roomNumber: room.roomNumber,
+        guestName: room.guestName,
+        type: 'no-details',
+        message: `Room ${room.roomNumber} has no guest profile details in Opera export.`,
+      });
+    } else if (room.adults === 0) {
+      room.issueType = 'no-adults';
+      anomalies.push({
+        roomNumber: room.roomNumber,
+        guestName: room.guestName,
+        type: 'no-adults',
+        message: `Room ${room.roomNumber} (${room.guestName}) has 0 adults registered.`,
+      });
+    } else if (!room.arrivalDate || !room.departureDate) {
+      anomalies.push({
+        roomNumber: room.roomNumber,
+        guestName: room.guestName,
+        type: 'missing-dates',
+        message: `Room ${room.roomNumber} (${room.guestName}) has missing stay dates.`,
+      });
     }
   }
 

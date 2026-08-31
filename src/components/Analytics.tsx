@@ -22,7 +22,9 @@ import {
   Utensils,
   Award,
   Calendar,
-  Clock
+  Clock,
+  AlertTriangle,
+  FlaskConical
 } from 'lucide-react';
 import { bangkokHour, businessDate, businessMonth } from '../lib/businessDate';
 
@@ -45,13 +47,14 @@ interface DailyStats {
 
 export const Analytics: React.FC<AnalyticsProps> = ({ hotelId }) => {
   const [selectedMonth, setSelectedMonth] = useState(() => businessMonth());
+  const [includeDemoData, setIncludeDemoData] = useState<boolean>(false);
   const [dailyStats, setDailyStats] = useState<DailyStats[]>([]);
   const [hourlyTraffic, setHourlyTraffic] = useState<{ hour: string; count: number }[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchData();
-  }, [hotelId, selectedMonth]);
+  }, [hotelId, selectedMonth, includeDemoData]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -73,6 +76,10 @@ export const Analytics: React.FC<AnalyticsProps> = ({ hotelId }) => {
       const summariesMap: Record<string, DailySummary> = {};
       summariesSnap.docs.forEach((d) => {
         const data = d.data() as DailySummary;
+        // If not including demo data, skip synthetic docs
+        if (!includeDemoData && (data.isSynthetic || data.syntheticSource === 'historicalSeeder')) {
+          return;
+        }
         if (data.date.startsWith(selectedMonth)) {
           summariesMap[data.date] = data;
         }
@@ -84,6 +91,9 @@ export const Analytics: React.FC<AnalyticsProps> = ({ hotelId }) => {
       const forecastMap: Record<string, number> = {};
       forecastSnap.docs.forEach((d) => {
         const data = d.data() as MealForecastItem;
+        if (!includeDemoData && (data.isSynthetic || data.syntheticSource === 'historicalSeeder')) {
+          return;
+        }
         forecastMap[data.date] = data.totalCovers || 0;
       });
 
@@ -125,6 +135,9 @@ export const Analytics: React.FC<AnalyticsProps> = ({ hotelId }) => {
 
           checkinsSnap.docs.forEach((docSnap) => {
             const data = docSnap.data() as CheckIn;
+            if (!includeDemoData && (data.isSynthetic || data.syntheticSource === 'historicalSeeder')) {
+              return;
+            }
             const totalPax = (Number(data.adultsAte) || 0) + (Number(data.childrenAte) || 0) + (Number(data.infantsAte) || 0);
 
             if (data.mealService === 'dinner') {
@@ -207,7 +220,21 @@ export const Analytics: React.FC<AnalyticsProps> = ({ hotelId }) => {
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Demo Data Toggle */}
+            <label className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-border bg-[#F2EBE4]/40 hover:bg-[#F2EBE4] cursor-pointer transition-all text-xs font-mono-custom">
+              <input
+                type="checkbox"
+                checked={includeDemoData}
+                onChange={(e) => setIncludeDemoData(e.target.checked)}
+                className="rounded border-border text-accent focus:ring-accent w-3.5 h-3.5 cursor-pointer"
+              />
+              <span className="flex items-center gap-1.5 font-medium text-foreground">
+                <FlaskConical size={13} className={includeDemoData ? 'text-amber-600' : 'text-muted-foreground'} />
+                <span>Include demo data</span>
+              </span>
+            </label>
+
             <div className="flex items-center gap-1 bg-[#F2EBE4]/60 p-1 rounded-xl border border-border">
               {['2023', '2024', '2025', '2026'].map((yr) => {
                 const isSelected = selectedMonth.startsWith(yr);
@@ -237,6 +264,21 @@ export const Analytics: React.FC<AnalyticsProps> = ({ hotelId }) => {
           </div>
         </div>
       </div>
+
+      {/* Synthetic Demo Data Warning Banner */}
+      {includeDemoData && (
+        <div className="bg-amber-50 border border-amber-300/80 text-amber-900 rounded-2xl p-4 flex items-center gap-3 shadow-xs">
+          <AlertTriangle size={20} className="text-amber-600 shrink-0" />
+          <div className="text-xs">
+            <p className="font-bold font-mono-custom text-amber-950">
+              Showing synthetic demo data
+            </p>
+            <p className="text-amber-800 mt-0.5">
+              Attendance and revenue figures include randomly generated historical projections. Toggle off to view verified real-world Opera data only.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* KPI Cards */}
       {loading ? (
