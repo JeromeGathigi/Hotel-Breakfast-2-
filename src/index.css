@@ -1,0 +1,210 @@
+@import "tailwindcss";
+
+@font-face {
+  font-family: "Claimcheck";
+  src: url("https://db.onlinewebfonts.com/t/34c9c22d713c72dc899b646cba7f0931.woff2") format("woff2"),
+       url("https://db.onlinewebfonts.com/t/34c9c22d713c72dc899b646cba7f0931.woff") format("woff"),
+       url("https://db.onlinewebfonts.com/t/34c9c22d713c72dc899b646cba7f0931.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Numbers-Claimcheck";
+  src: url("https://db.onlinewebfonts.com/t/34c9c22d713c72dc899b646cba7f0931.woff2") format("woff2"),
+       url("https://db.onlinewebfonts.com/t/34c9c22d713c72dc899b646cba7f0931.woff") format("woff");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@layer base {
+  * {
+    font-variant-numeric: normal tabular-nums lining-nums;
+    font-feature-settings: "zero" 0;
+  }
+
+  :root {
+    --font-sans: 'Rokkitt', serif;
+    --font-mono: 'Claimcheck', 'Numbers-Claimcheck', 'Numbers Claimcheck', 'Chivo Mono', 'Geist Mono', monospace;
+    --font-number: 'Claimcheck', 'Numbers-Claimcheck', 'Numbers Claimcheck', 'Chivo Mono', 'Geist Mono', monospace;
+    --font-display: 'Ubuntu', sans-serif;
+
+    /* Novotel Design Archetype: Sand/Nude Canvas & Deep Corporate Navy */
+    --bg: #F2EBE4;
+    --ink: #0A162B;
+    --ink-muted: rgba(10, 22, 43, 0.6);
+    --accent: #1A3A6D;
+    --accent-hover: #132b52;
+    --card-bg: #FFFFFF;
+    --border: rgba(10, 22, 43, 0.08);
+    --border-strong: rgba(10, 22, 43, 0.14);
+    --shadow: 0 12px 40px -12px rgba(10, 22, 43, 0.12);
+    --shadow-sm: 0 4px 20px -4px rgba(10, 22, 43, 0.06);
+
+    /* Tailwind mapped tokens */
+    --background: var(--bg);
+    --foreground: var(--ink);
+    --card: var(--card-bg);
+    --card-foreground: var(--ink);
+    --muted-foreground: var(--ink-muted);
+    --on-primary: #FFFFFF;
+  }
+
+  /* Novotel Specific Theme */
+  .theme-novotel {
+    --bg: #F2EBE4;
+    --ink: #0A162B;
+    --ink-muted: rgba(10, 22, 43, 0.6);
+    --accent: #1A3A6D;
+    --accent-hover: #132b52;
+    --card-bg: #FFFFFF;
+    --border: rgba(10, 22, 43, 0.08);
+    --border-strong: rgba(10, 22, 43, 0.14);
+    --shadow: 0 12px 40px -12px rgba(10, 22, 43, 0.12);
+    --shadow-sm: 0 4px 20px -4px rgba(10, 22, 43, 0.06);
+    --on-primary: #FFFFFF;
+  }
+
+  /* ibis Specific Theme */
+  .theme-ibis {
+    --bg: #F5EFEB;
+    --ink: #11141A;
+    --ink-muted: rgba(17, 20, 26, 0.6);
+    --accent: #E2001A;
+    --accent-hover: #b80015;
+    --card-bg: #FFFFFF;
+    --border: rgba(17, 20, 26, 0.08);
+    --border-strong: rgba(17, 20, 26, 0.14);
+    --shadow: 0 12px 40px -12px rgba(226, 0, 26, 0.09);
+    --shadow-sm: 0 4px 20px -4px rgba(17, 20, 26, 0.06);
+    --on-primary: #FFFFFF;
+  }
+
+  * {
+    border-color: var(--border);
+    box-sizing: border-box;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    background-color: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    letter-spacing: -0.01em;
+    min-height: 100vh;
+  }
+
+  h1, h2, h3, .font-display {
+    font-family: var(--font-display);
+    letter-spacing: -0.03em;
+  }
+
+  .font-mono-code {
+    font-family: var(--font-mono);
+  }
+}
+
+/* Custom utility helpers */
+.font-display {
+  font-family: 'Ubuntu', sans-serif;
+}
+
+.font-sans {
+  font-family: 'Rokkitt', serif;
+}
+
+.font-number,
+.font-mono-custom {
+  font-family: var(--font-number);
+  font-variant-numeric: normal tabular-nums lining-nums;
+  font-feature-settings: "zero" 0;
+}
+
+.card-luxury {
+  background-color: var(--card-bg);
+  box-shadow: var(--shadow);
+  border: 1px solid var(--border);
+}
+
+.card-luxury:hover {
+  border-color: var(--accent);
+}
+
+.stat-card-luxury {
+  background-color: var(--card-bg);
+  box-shadow: var(--shadow);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px;
+}
+
+.room-badge-luxury {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background-color: rgba(26, 58, 109, 0.06);
+  color: var(--accent);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-family: var(--font-number);
+  font-variant-numeric: tabular-nums lining-nums;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.theme-ibis .room-badge-luxury {
+  background-color: rgba(226, 0, 26, 0.06);
+  color: #E2001A;
+}
+
+.btn-action-luxury {
+  width: 100%;
+  background-color: var(--accent);
+  color: #ffffff;
+  border: none;
+  padding: 14px 18px;
+  border-radius: 10px;
+  font-family: var(--font-number);
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn-action-luxury:hover {
+  background-color: var(--accent-hover);
+  transform: translateY(-1px);
+}
+
+.label-mono {
+  font-family: var(--font-number);
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-muted);
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(10, 22, 43, 0.15);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(10, 22, 43, 0.3);
+}

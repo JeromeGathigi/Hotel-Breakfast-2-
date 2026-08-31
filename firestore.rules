@@ -1,0 +1,38 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper function checking if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Admin role check: custom claim OR email is the primary owner / admin
+    function isAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.admin == true ||
+        request.auth.token.email.lower() == 'jeromegathigi@gmail.com' ||
+        request.auth.token.email.lower() == 'admin@novotel-chiangmai.com'
+      );
+    }
+
+    // Staff role check: staff custom claim, admin, or authenticated user
+    function isStaff() {
+      return isAuthenticated() && (
+        request.auth.token.staff == true ||
+        isAdmin() ||
+        request.auth.token.email.matches('.*@(novotel|ibis|accor).*') ||
+        request.auth.token.email.lower() == 'jeromegathigi@gmail.com'
+      );
+    }
+
+    match /hotels/{hotelId} {
+      match /guests/{guestId}          { allow read: if isStaff(); allow write: if isAdmin(); }
+      match /metadata/{docId}          { allow read: if isStaff(); allow write: if isAdmin(); }
+      match /overrides/{roomNumber}    { allow read: if isStaff(); allow write: if isStaff(); }
+      match /history/{date}/guests/{g} { allow read: if isStaff(); allow write: if isAdmin(); }
+      match /dailyStats/{date}         { allow read: if isStaff(); allow write: if isAdmin(); }
+      match /checkins/{date}/rooms/{r} { allow read: if isStaff(); allow write: if isStaff(); }
+      match /{allChildren=**}          { allow read: if isStaff(); allow write: if isAdmin(); }
+    }
+  }
+}
