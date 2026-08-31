@@ -184,52 +184,68 @@ export const DEFAULT_IBIS_TABLES: DiningTable[] = [
 ];
 
 export const NOVOTEL_FLOOR_FEATURES: FloorFeature[] = [
-  // Structure & Architectural features (unlabelled unless stated)
-  { id: 'n-boh-left', kind: 'back-of-house', label: '', x: 0, y: 120, w: 150, h: 205 },
+  // 1. Building Envelope Outer Wall
+  { id: 'n-building-envelope', kind: 'building-envelope', label: '', x: 0, y: 0, w: 870, h: 330 },
+
+  // 2. Room Outlines & Zones (visually distinct)
+  { id: 'n-reception', kind: 'reception', label: '', x: 0, y: 120, w: 150, h: 205 },
+  { id: 'n-main-dining-hall', kind: 'dining-hall', label: '', x: 150, y: 120, w: 715, h: 205 },
+  { id: 'n-gb-room', kind: 'bar-room', label: '', x: 365, y: 20, w: 375, h: 75 },
+
+  // 3. Structure & Architectural features (unlabelled unless stated)
   { id: 'n-terrace-stairs', kind: 'terrace', label: '', x: 45, y: 53, w: 80, h: 17 },
-  { id: 'n-main-dining-hall', kind: 'back-of-house', label: '', x: 150, y: 120, w: 715, h: 205 },
-  { id: 'n-gb-room', kind: 'back-of-house', label: '', x: 365, y: 20, w: 375, h: 75 },
   { id: 'n-bar-counter', kind: 'bar-counter', label: '', x: 715, y: 28, w: 20, h: 60 },
-  { id: 'n-round-bar6', kind: 'island', label: '', x: 690, y: 55, w: 22, h: 22, shape: 'round' },
+  { id: 'n-round-bar6', kind: 'island', label: '', x: 679, y: 44, w: 22, h: 22, shape: 'round' },
   { id: 'n-service-c3c4', kind: 'buffet', label: '', x: 340, y: 130, w: 25, h: 18 },
   { id: 'n-buffet-top', kind: 'buffet', label: '', x: 600, y: 125, w: 110, h: 20 },
   { id: 'n-buffet-bot', kind: 'buffet', label: '', x: 510, y: 305, w: 235, h: 20 },
   { id: 'n-buffet-island', kind: 'island', label: '', x: 630, y: 205, w: 100, h: 30, shape: 'round' },
-  { id: 'n-banquette-right-up', kind: 'banquette', label: '', x: 855, y: 25, w: 15, h: 60 },
-  { id: 'n-banquette-right-low', kind: 'banquette', label: '', x: 855, y: 120, w: 15, h: 100 },
+  { id: 'n-banquette-right-up', kind: 'banquette', label: '', x: 848, y: 25, w: 15, h: 60 },
+  { id: 'n-banquette-right-low', kind: 'banquette', label: '', x: 848, y: 120, w: 15, h: 100 },
   { id: 'n-bench-left', kind: 'banquette', label: '', x: 150, y: 270, w: 12, h: 45 },
 
-  // Labelled features
+  // 4. Labelled features
   { id: 'n-hostess', kind: 'hostess-desk', label: 'HOSTESS DESK', x: 35, y: 192, w: 85, h: 22 },
   { id: 'n-coffee-stand', kind: 'coffee-stand', label: 'COFFEE STAND', x: 175, y: 205, w: 14, h: 55, verticalLabel: true },
 ];
 
 export const IBIS_FLOOR_FEATURES: FloorFeature[] = [
-  // Structure & Architectural features (unlabelled unless stated)
+  // 1. Building Envelope Outer Wall
+  { id: 'i-building-envelope', kind: 'building-envelope', label: '', x: 0, y: 0, w: 940, h: 420 },
+
+  // 2. Room Outlines & Zones (visually distinct)
   { id: 'i-boh-left', kind: 'back-of-house', label: '', x: 0, y: 125, w: 280, h: 210 },
-  { id: 'i-bar-prep', kind: 'back-of-house', label: '', x: 160, y: 0, w: 120, h: 120 },
-  { id: 'i-main-dining-hall', kind: 'back-of-house', label: '', x: 280, y: 120, w: 595, h: 215 },
-  { id: 'i-smoking-terrace', kind: 'smoking-terrace', label: '', x: 280, y: 335, w: 280, h: 85 },
-  { id: 'i-terrace-ext', kind: 'terrace', label: '', x: 890, y: 130, w: 50, h: 290 },
+  { id: 'i-bar-prep', kind: 'prep-room', label: '', x: 160, y: 0, w: 120, h: 120 },
+  { id: 'i-main-dining-hall', kind: 'dining-hall', label: '', x: 280, y: 120, w: 595, h: 215 },
+  { id: 'i-smoking-terrace', kind: 'smoking-terrace', label: '', x: 280, y: 335, w: 280, h: 83 },
+  { id: 'i-terrace-ext', kind: 'terrace', label: '', x: 890, y: 130, w: 48, h: 288 },
+
+  // 3. Buffet & Architectural features
   { id: 'i-buffet-top-left', kind: 'buffet', label: '', x: 310, y: 10, w: 90, h: 40 },
   { id: 'i-buffet-top-mid', kind: 'buffet', label: '', x: 470, y: 130, w: 125, h: 25 },
   { id: 'i-buffet-top-right', kind: 'buffet', label: '', x: 675, y: 130, w: 85, h: 25 },
   { id: 'i-buffet-island', kind: 'island', label: '', x: 700, y: 205, w: 90, h: 50, shape: 'round' },
   { id: 'i-tall-unit-left', kind: 'banquette', label: '', x: 405, y: 195, w: 14, h: 70 },
-  { id: 'i-banquette-right-up', kind: 'banquette', label: '', x: 855, y: 140, w: 15, h: 60 },
-  { id: 'i-banquette-right-low', kind: 'banquette', label: '', x: 855, y: 220, w: 15, h: 50 },
-  { id: 'i-bench-bottom-left', kind: 'banquette', label: '', x: 560, y: 400, w: 100, h: 18 },
-  { id: 'i-bench-bottom-mid', kind: 'banquette', label: '', x: 675, y: 400, w: 100, h: 18 },
-  { id: 'i-bench-bottom-right', kind: 'banquette', label: '', x: 790, y: 400, w: 90, h: 18 },
+  { id: 'i-banquette-right-up', kind: 'banquette', label: '', x: 858, y: 140, w: 15, h: 60 },
+  { id: 'i-banquette-right-low', kind: 'banquette', label: '', x: 858, y: 220, w: 15, h: 50 },
+  { id: 'i-bench-bottom-left', kind: 'banquette', label: '', x: 560, y: 398, w: 100, h: 18 },
+  { id: 'i-bench-bottom-mid', kind: 'banquette', label: '', x: 675, y: 398, w: 100, h: 18 },
+  { id: 'i-bench-bottom-right', kind: 'banquette', label: '', x: 790, y: 398, w: 90, h: 18 },
 
-  // Unlabelled round shapes
-  { id: 'i-round-unit-left', kind: 'island', label: '', x: 350, y: 218, w: 36, h: 36, shape: 'round' },
-  { id: 'i-round-right-1', kind: 'island', label: '', x: 850, y: 150, w: 24, h: 24, shape: 'round' },
-  { id: 'i-round-right-2', kind: 'island', label: '', x: 850, y: 235, w: 24, h: 24, shape: 'round' },
-  { id: 'i-terrace-t1', kind: 'island', label: '', x: 905, y: 175, w: 20, h: 20, shape: 'round' },
-  { id: 'i-terrace-t2', kind: 'island', label: '', x: 905, y: 205, w: 20, h: 20, shape: 'round' },
+  // 4. Unlabelled round shapes
+  { id: 'i-round-unit-left', kind: 'island', label: '', x: 332, y: 200, w: 36, h: 36, shape: 'round' },
+  { id: 'i-round-right-1', kind: 'island', label: '', x: 838, y: 138, w: 24, h: 24, shape: 'round' },
+  { id: 'i-round-right-2', kind: 'island', label: '', x: 838, y: 223, w: 24, h: 24, shape: 'round' },
+  { id: 'i-terrace-t1', kind: 'island', label: '', x: 895, y: 165, w: 20, h: 20, shape: 'round' },
+  { id: 'i-terrace-t2', kind: 'island', label: '', x: 895, y: 195, w: 20, h: 20, shape: 'round' },
 
-  // Labelled features
+  // 5. Four unlabelled round tables inside smoking terrace (radius 11, non-seatable)
+  { id: 'i-smoking-t1', kind: 'island', label: '', x: 444, y: 344, w: 22, h: 22, shape: 'round' },
+  { id: 'i-smoking-t2', kind: 'island', label: '', x: 489, y: 344, w: 22, h: 22, shape: 'round' },
+  { id: 'i-smoking-t3', kind: 'island', label: '', x: 444, y: 389, w: 22, h: 22, shape: 'round' },
+  { id: 'i-smoking-t4', kind: 'island', label: '', x: 489, y: 389, w: 22, h: 22, shape: 'round' },
+
+  // 6. Labelled features
   { id: 'i-hostess', kind: 'hostess-desk', label: 'HOSTESS DESK', x: 320, y: 118, w: 90, h: 20 },
   { id: 'i-front-desk', kind: 'front-desk', label: 'FRONT DESK', x: 683, y: 158, w: 74, h: 20 },
 ];

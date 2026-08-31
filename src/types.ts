@@ -112,7 +112,8 @@ export interface DiningTable {
 
 export interface FloorFeature {
   id: string;
-  kind: 'hostess-desk' | 'front-desk' | 'coffee-stand' | 'buffet' | 'island'
+  kind: 'building-envelope' | 'dining-hall' | 'bar-room' | 'prep-room' | 'reception'
+      | 'hostess-desk' | 'front-desk' | 'coffee-stand' | 'buffet' | 'island'
       | 'bar-counter' | 'banquette' | 'terrace' | 'smoking-terrace' | 'back-of-house';
   /** Empty string for anything the floor plan does not label. */
   label: string;
@@ -121,6 +122,28 @@ export interface FloorFeature {
   shape?: 'rect' | 'round';
   /** Rotate the label 90 degrees, for tall narrow units like the coffee stand. */
   verticalLabel?: boolean;
+}
+
+export interface TableLayoutEntry {
+  id: string;                   // matches DiningTable.id
+  tableNumber: string;
+  capacity: number;
+  zone: string;
+  x: number;                    // viewBox units
+  y: number;
+  shape?: 'rectangle' | 'square' | 'round' | 'booth' | 'diamond' | 'bar_seat' | 'lounge' | 'semi_circle';
+  isSmoking?: boolean;
+}
+
+export interface TableLayout {
+  id: string;
+  name: string;                 // "Standard", "Friday Buffet", "Christmas"
+  tables: TableLayoutEntry[];   // geometry only — strip status, occupied* fields
+  isActive: boolean;
+  createdByUid: string;
+  createdByEmail: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface MealForecastItem {

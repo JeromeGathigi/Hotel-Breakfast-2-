@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   db, 
+  auth,
   collection, 
   getDocs,
   onSnapshot, 
@@ -8,9 +9,10 @@ import {
   setDoc, 
   updateDoc, 
   deleteDoc, 
+  writeBatch,
   logOperaAuditTrail 
 } from '../firebase';
-import { DiningTable, MealServiceType, Guest } from '../types';
+import { DiningTable, MealServiceType, Guest, TableLayout, TableLayoutEntry } from '../types';
 import { DEFAULT_NOVOTEL_TABLES, DEFAULT_IBIS_TABLES } from '../constants';
 import { TableCardSkeleton } from './Skeleton';
 import { RestaurantFloorPlan2D } from './RestaurantFloorPlan2D';
@@ -23,12 +25,18 @@ import {
   RotateCcw, 
   Search, 
   X, 
-  SlidersHorizontal,
-  ChevronRight,
-  Check,
-  LayoutGrid,
-  Map as MapIcon,
-  Cigarette
+  SlidersHorizontal, 
+  ChevronRight, 
+  Check, 
+  LayoutGrid, 
+  Map as MapIcon, 
+  Cigarette, 
+  Layers, 
+  ChevronDown, 
+  AlertTriangle, 
+  Save, 
+  BookmarkCheck,
+  MoreVertical
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -40,6 +48,7 @@ interface SeatingPlanProps {
 
 export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, activeMealService }) => {
   const [tables, setTables] = useState<DiningTable[]>([]);
+  const [layouts, setLayouts] = useState<TableLayout[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'blueprint' | 'grid'>('blueprint');
   const [selectedZone, setSelectedZone] = useState<string>('All');
@@ -52,7 +61,25 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
   const [assignModalOpen, setAssignModalOpen] = useState(false);
   const [assignPax, setAssignPax] = useState<number>(2);
 
-  // Subscribe to real-time dining tables
+  // Saved named layouts & reset modals state
+  const [isLayoutDropdownOpen, setIsLayoutDropdownOpen] = useState(false);
+  const [saveLayoutModalOpen, setSaveLayoutModalOpen] = useState(false);
+  const [manageLayoutsModalOpen, setManageLayoutsModalOpen] = useState(false);
+  const [newLayoutName, setNewLayoutName] = useState('');
+  const [isSavingLayout, setIsSavingLayout] = useState(false);
+
+  // Reset confirmation in-app modal (Stage 10 Defect 5)
+  const [resetModalOpen, setResetModalOpen] = useState(false);
+  const [resetHotelInput, setResetHotelInput] = useState('');
+  const [resetError, setResetError] = useState<string | null>(null);
+
+  // Occupied tables guard warning modal (Stage 11 Section 2)
+  const [occupiedWarningModalOpen, setOccupiedWarningModalOpen] = useState(false);
+  const [occupiedWarningMessage, setOccupiedWarningMessage] = useState('');
+
+  const currentUser = auth.currentUser;
+
+  // 1. Subscribe to real-time dining tables
   useEffect(() => {
     setLoading(true);
     const tablesRef = collection(db, 'hotels', hotelId, 'tables');
@@ -67,13 +94,13 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
           });
           setTables(defaults);
         } else {
-          const list = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as DiningTable));
-          list.sort((a, b) => a.tableNumber.localeCompare(b.tableNumber, undefined, { numeric: true }));
+          const list = snapshot.docs.map((d: any) => ({ id: d.id, ...d.data() } as DiningTable));
+          list.sort((a: any, b: any) => a.tableNumber.localeCompare(b.tableNumber, undefined, { numeric: true }));
           setTables(list);
         }
         setLoading(false);
       },
-      (err) => {
+      (err: any) => {
         console.warn('Seating plan listener notice:', err);
         setLoading(false);
       }
@@ -81,8 +108,8 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
 
     // Subscribe to in-house guests for table assignment lookup
     const guestsRef = collection(db, 'hotels', hotelId, 'guests');
-    const unsubGuests = onSnapshot(guestsRef, (snap) => {
-      const gList = snap.docs.map((d) => d.data() as Guest);
+    const unsubGuests = onSnapshot(guestsRef, (snap: any) => {
+      const gList = snap.docs.map((d: any) => d.data() as Guest);
       setInHouseGuests(gList);
     });
 
@@ -91,6 +118,60 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
       unsubGuests();
     };
   }, [hotelId]);
+
+  // 2. Subscribe to Saved Named Layouts (Stage 11) & Seed Baseline if empty
+  useEffect(() => {
+    const layoutsRef = collection(db, 'hotels', hotelId, 'layouts');
+    const unsubLayouts = onSnapshot(layoutsRef, async (snap: any) => {
+      if (snap.empty) {
+        // Seed baseline "Architect's plan"
+        const defaults = hotelId === 'ibis' ? DEFAULT_IBIS_TABLES : DEFAULT_NOVOTEL_TABLES;
+        const baselineEntries: TableLayoutEntry[] = defaults.map((t) => ({
+          id: t.id,
+          tableNumber: t.tableNumber,
+          capacity: t.capacity,
+          zone: t.zone,
+          x: t.x ?? 100,
+          y: t.y ?? 100,
+          shape: t.shape,
+          isSmoking: t.isSmoking,
+        }));
+
+        const baselineLayout: TableLayout = {
+          id: 'layout-architects-plan',
+          name: "Architect's plan",
+          tables: baselineEntries,
+          isActive: true,
+          createdByUid: currentUser?.uid || 'system',
+          createdByEmail: currentUser?.email || 'admin@accor.com',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+
+        try {
+          await setDoc(doc(db, 'hotels', hotelId, 'layouts', baselineLayout.id), baselineLayout);
+          setLayouts([baselineLayout]);
+        } catch (e) {
+          console.warn('Could not seed baseline layout:', e);
+        }
+      } else {
+        const list = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as TableLayout));
+        // Sort active first, then alphabetically
+        list.sort((a: TableLayout, b: TableLayout) => {
+          if (a.isActive && !b.isActive) return -1;
+          if (!a.isActive && b.isActive) return 1;
+          return a.name.localeCompare(b.name);
+        });
+        setLayouts(list);
+      }
+    });
+
+    return () => unsubLayouts();
+  }, [hotelId, currentUser]);
+
+  const activeLayout = useMemo(() => {
+    return layouts.find((l) => l.isActive) || null;
+  }, [layouts]);
 
   // Dynamic zones derived from loaded tables with 'All' first
   const zones = useMemo(() => {
@@ -140,7 +221,7 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
       );
 
       if (selectedTable?.id === table.id) {
-        setSelectedTable((prev) => prev ? { ...prev, status: newStatus } : null);
+        setSelectedTable((prev) => (prev ? { ...prev, status: newStatus } : null));
       }
     } catch (err) {
       console.error('Failed to update table status:', err);
@@ -156,7 +237,6 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
   const handleAssignGuest = async (guest: Guest) => {
     if (!selectedTable) return;
 
-    // Prompt confirmation if seating guest in smoking area
     if (selectedTable.zone === 'Smoking Terrace' || selectedTable.isSmoking) {
       const confirmedSmoking = window.confirm(
         `${selectedTable.tableNumber} is on the outdoor smoking terrace. Seat this party there?`
@@ -237,38 +317,310 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
     }
   };
 
-  const handleResetDefaultLayout = async () => {
+  /* --------------------------------------------------------------------------
+     STAGE 11: NAMED LAYOUTS APPLICATION & DIFFING
+     -------------------------------------------------------------------------- */
+  const handleApplyLayout = async (targetLayout: TableLayout) => {
+    setIsLayoutDropdownOpen(false);
+
+    // Guard: Refuse to apply while any table is occupied
     const occupiedTables = tables.filter((t) => t.status === 'occupied');
     if (occupiedTables.length > 0) {
-      alert(
-        `Cannot reset layout while tables are occupied: ${occupiedTables.map((t) => t.tableNumber).join(', ')}. Please clear or complete service for all seated guests first.`
+      const occupiedNames = occupiedTables.map((t) => t.tableNumber).join(', ');
+      setOccupiedWarningMessage(
+        `Cannot switch layout while tables are occupied: ${occupiedNames}. Please clear or complete service for all seated guests first.`
       );
-      return;
-    }
-
-    const input = window.prompt(
-      `Type "${hotelId}" to confirm resetting the floor plan to the exact architectural defaults:`
-    );
-    if (!input || input.trim().toLowerCase() !== hotelId.toLowerCase()) {
+      setOccupiedWarningModalOpen(true);
       return;
     }
 
     try {
-      const snap = await getDocs(collection(db, 'hotels', hotelId, 'tables'));
-      if (snap && snap.docs) {
-        for (const d of snap.docs) {
-          await deleteDoc(doc(db, 'hotels', hotelId, 'tables', d.id));
+      const batch = writeBatch(db);
+      const currentMap = new Map<string, DiningTable>();
+      tables.forEach((t) => currentMap.set(t.id, t));
+
+      const layoutMap = new Map<string, TableLayoutEntry>();
+      targetLayout.tables.forEach((t) => layoutMap.set(t.id, t));
+
+      // 1. Tables in both: update geometry & attributes, leave status & occupancy fields untouched
+      // 2. Tables only in layout: create with status: 'available'
+      for (const [id, entry] of layoutMap.entries()) {
+        const tableRef = doc(db, 'hotels', hotelId, 'tables', id);
+        if (currentMap.has(id)) {
+          const live = currentMap.get(id)!;
+          const updatedTable: DiningTable = {
+            ...live,
+            tableNumber: entry.tableNumber,
+            capacity: entry.capacity,
+            zone: entry.zone,
+            x: entry.x,
+            y: entry.y,
+            shape: entry.shape,
+            isSmoking: Boolean(entry.isSmoking),
+          };
+          batch.set(tableRef, updatedTable);
+        } else {
+          const newTable: DiningTable = {
+            id: entry.id,
+            tableNumber: entry.tableNumber,
+            capacity: entry.capacity,
+            zone: entry.zone,
+            status: 'available',
+            x: entry.x,
+            y: entry.y,
+            shape: entry.shape,
+            isSmoking: Boolean(entry.isSmoking),
+          };
+          batch.set(tableRef, newTable);
         }
       }
-      const defaults = hotelId === 'ibis' ? DEFAULT_IBIS_TABLES : DEFAULT_NOVOTEL_TABLES;
-      for (const t of defaults) {
-        await setDoc(doc(db, 'hotels', hotelId, 'tables', t.id), t);
+
+      // 3. Tables only in Firestore (live tables): delete
+      for (const [id] of currentMap.entries()) {
+        if (!layoutMap.has(id)) {
+          const tableRef = doc(db, 'hotels', hotelId, 'tables', id);
+          batch.delete(tableRef);
+        }
       }
+
+      // 4. Update isActive on layouts in a single batch
+      layouts.forEach((l) => {
+        const layoutRef = doc(db, 'hotels', hotelId, 'layouts', l.id);
+        batch.update(layoutRef, {
+          isActive: l.id === targetLayout.id,
+          updatedAt: new Date().toISOString(),
+        });
+      });
+
+      await batch.commit();
+
       await logOperaAuditTrail(
         hotelId,
         'TABLE_LAYOUT_UPDATE',
-        `Reset floor plan to default blueprint layout (${hotelId})`
+        `Applied layout "${targetLayout.name}" (${targetLayout.tables.length} tables) by ${currentUser?.email || 'admin'}`
       );
+    } catch (err) {
+      console.error('Failed to apply layout:', err);
+    }
+  };
+
+  /* --------------------------------------------------------------------------
+     STAGE 11: SAVE CURRENT ARRANGEMENT AS NEW NAMED LAYOUT
+     -------------------------------------------------------------------------- */
+  const handleSaveCurrentAsLayout = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const name = newLayoutName.trim();
+    if (!name) return;
+
+    setIsSavingLayout(true);
+    try {
+      // Geometry only — strip all status and occupancy fields
+      const layoutEntries: TableLayoutEntry[] = tables.map((t) => ({
+        id: t.id,
+        tableNumber: t.tableNumber,
+        capacity: t.capacity,
+        zone: t.zone,
+        x: t.x ?? 100,
+        y: t.y ?? 100,
+        shape: t.shape,
+        isSmoking: Boolean(t.isSmoking),
+      }));
+
+      const newLayoutId = `layout-${Date.now()}`;
+      const newLayout: TableLayout = {
+        id: newLayoutId,
+        name,
+        tables: layoutEntries,
+        isActive: true,
+        createdByUid: currentUser?.uid || 'admin',
+        createdByEmail: currentUser?.email || 'admin@accor.com',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      const batch = writeBatch(db);
+      // Mark all other layouts inactive
+      layouts.forEach((l) => {
+        const lRef = doc(db, 'hotels', hotelId, 'layouts', l.id);
+        batch.update(lRef, { isActive: false });
+      });
+      // Set new layout
+      batch.set(doc(db, 'hotels', hotelId, 'layouts', newLayoutId), newLayout);
+
+      await batch.commit();
+
+      await logOperaAuditTrail(
+        hotelId,
+        'TABLE_LAYOUT_UPDATE',
+        `Created and activated new named layout "${name}" (${tables.length} tables)`
+      );
+
+      setNewLayoutName('');
+      setSaveLayoutModalOpen(false);
+    } catch (err) {
+      console.error('Failed to save layout:', err);
+    } finally {
+      setIsSavingLayout(false);
+    }
+  };
+
+  /* --------------------------------------------------------------------------
+     STAGE 11: OVERWRITE EXISTING LAYOUT WITH CURRENT ARRANGEMENT
+     -------------------------------------------------------------------------- */
+  const handleOverwriteLayout = async (layout: TableLayout) => {
+    if (!confirm(`Overwrite layout "${layout.name}" with the current table positions?`)) return;
+
+    try {
+      const layoutEntries: TableLayoutEntry[] = tables.map((t) => ({
+        id: t.id,
+        tableNumber: t.tableNumber,
+        capacity: t.capacity,
+        zone: t.zone,
+        x: t.x ?? 100,
+        y: t.y ?? 100,
+        shape: t.shape,
+        isSmoking: Boolean(t.isSmoking),
+      }));
+
+      const layoutRef = doc(db, 'hotels', hotelId, 'layouts', layout.id);
+      await updateDoc(layoutRef, {
+        tables: layoutEntries,
+        updatedAt: new Date().toISOString(),
+      });
+
+      await logOperaAuditTrail(
+        hotelId,
+        'TABLE_LAYOUT_UPDATE',
+        `Updated layout "${layout.name}" with current ${tables.length} table positions`
+      );
+    } catch (err) {
+      console.error('Failed to update layout:', err);
+    }
+  };
+
+  /* --------------------------------------------------------------------------
+     STAGE 11: DELETE NAMED LAYOUT
+     -------------------------------------------------------------------------- */
+  const handleDeleteLayout = async (layout: TableLayout) => {
+    if (!confirm(`Delete layout "${layout.name}"? (Live tables will remain untouched)`)) return;
+
+    try {
+      await deleteDoc(doc(db, 'hotels', hotelId, 'layouts', layout.id));
+      await logOperaAuditTrail(
+        hotelId,
+        'TABLE_LAYOUT_UPDATE',
+        `Deleted layout "${layout.name}"`
+      );
+    } catch (err) {
+      console.error('Failed to delete layout:', err);
+    }
+  };
+
+  /* --------------------------------------------------------------------------
+     STAGE 11: BATCH UPDATE POSITIONS (FROM 2D BLUEPRINT DRAG)
+     -------------------------------------------------------------------------- */
+  const handleBatchUpdatePositions = async (updatedTables: DiningTable[]) => {
+    try {
+      const batch = writeBatch(db);
+      updatedTables.forEach((t) => {
+        const tableRef = doc(db, 'hotels', hotelId, 'tables', t.id);
+        batch.update(tableRef, {
+          x: t.x,
+          y: t.y,
+        });
+      });
+
+      await batch.commit();
+
+      await logOperaAuditTrail(
+        hotelId,
+        'TABLE_LAYOUT_UPDATE',
+        `Repositioned tables on 2D blueprint (${updatedTables.length} tables updated)`
+      );
+    } catch (err) {
+      console.error('Failed to save table positions:', err);
+      throw err;
+    }
+  };
+
+  /* --------------------------------------------------------------------------
+     STAGE 10 DEFECT 5: IN-APP MODAL RESET CONFIRMATION
+     -------------------------------------------------------------------------- */
+  const handleOpenResetModal = () => {
+    const occupiedTables = tables.filter((t) => t.status === 'occupied');
+    if (occupiedTables.length > 0) {
+      setOccupiedWarningMessage(
+        `Cannot reset layout while tables are occupied: ${occupiedTables.map((t) => t.tableNumber).join(', ')}. Please clear or complete service for all seated guests first.`
+      );
+      setOccupiedWarningModalOpen(true);
+      return;
+    }
+    setResetHotelInput('');
+    setResetError(null);
+    setResetModalOpen(true);
+  };
+
+  const handleConfirmResetLayout = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (resetHotelInput.trim().toLowerCase() !== hotelId.toLowerCase()) {
+      setResetError(`Please type "${hotelId}" exactly to confirm.`);
+      return;
+    }
+
+    try {
+      const defaults = hotelId === 'ibis' ? DEFAULT_IBIS_TABLES : DEFAULT_NOVOTEL_TABLES;
+      const batch = writeBatch(db);
+
+      // Clean current tables
+      const snap = await getDocs(collection(db, 'hotels', hotelId, 'tables'));
+      if (snap && snap.docs) {
+        snap.docs.forEach((d: any) => {
+          batch.delete(doc(db, 'hotels', hotelId, 'tables', d.id));
+        });
+      }
+
+      // Re-populate exact defaults
+      defaults.forEach((t) => {
+        batch.set(doc(db, 'hotels', hotelId, 'tables', t.id), t);
+      });
+
+      // Also ensure "Architect's plan" layout exists and is active
+      const baselineEntries: TableLayoutEntry[] = defaults.map((t) => ({
+        id: t.id,
+        tableNumber: t.tableNumber,
+        capacity: t.capacity,
+        zone: t.zone,
+        x: t.x ?? 100,
+        y: t.y ?? 100,
+        shape: t.shape,
+        isSmoking: t.isSmoking,
+      }));
+
+      const baselineLayout: TableLayout = {
+        id: 'layout-architects-plan',
+        name: "Architect's plan",
+        tables: baselineEntries,
+        isActive: true,
+        createdByUid: currentUser?.uid || 'system',
+        createdByEmail: currentUser?.email || 'admin@accor.com',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      layouts.forEach((l) => {
+        batch.update(doc(db, 'hotels', hotelId, 'layouts', l.id), { isActive: false });
+      });
+      batch.set(doc(db, 'hotels', hotelId, 'layouts', baselineLayout.id), baselineLayout);
+
+      await batch.commit();
+
+      await logOperaAuditTrail(
+        hotelId,
+        'TABLE_LAYOUT_UPDATE',
+        `Reset floor plan to exact architectural default blueprint (${hotelId})`
+      );
+
+      setResetModalOpen(false);
       setIsEditLayoutOpen(false);
     } catch (err) {
       console.error('Failed to reset layout:', err);
@@ -351,13 +703,77 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
               )}
             </div>
 
+            {/* Admin Saved Layouts Selector (Stage 11) */}
+            {isAdmin && (
+              <div className="relative">
+                <button
+                  onClick={() => setIsLayoutDropdownOpen(!isLayoutDropdownOpen)}
+                  className="px-3.5 py-2 rounded-xl border border-border bg-white hover:bg-[#F2EBE4]/50 text-foreground font-mono-custom font-medium text-xs flex items-center gap-2 transition-all shadow-xs cursor-pointer"
+                >
+                  <Layers size={13} className="text-accent" />
+                  <span className="max-w-[130px] truncate">
+                    {activeLayout ? activeLayout.name : 'Select Layout'}
+                  </span>
+                  <ChevronDown size={12} className="text-muted-foreground" />
+                </button>
+
+                {/* Dropdown Menu */}
+                {isLayoutDropdownOpen && (
+                  <div className="absolute right-0 mt-1.5 w-64 bg-white border border-border rounded-xl shadow-2xl z-40 py-1.5 overflow-hidden">
+                    <div className="px-3 py-1.5 border-b border-border/60">
+                      <p className="label-mono text-[10px] text-muted-foreground">Saved Arrangements</p>
+                    </div>
+
+                    <div className="max-h-48 overflow-y-auto divide-y divide-border/40">
+                      {layouts.map((l) => (
+                        <button
+                          key={l.id}
+                          onClick={() => handleApplyLayout(l)}
+                          className={`w-full px-3 py-2 text-left text-xs font-mono-custom flex items-center justify-between hover:bg-[#F2EBE4]/60 transition-all cursor-pointer ${
+                            l.isActive ? 'bg-accent/5 font-bold text-accent' : 'text-foreground'
+                          }`}
+                        >
+                          <span className="truncate">{l.name}</span>
+                          {l.isActive && <Check size={13} className="text-accent shrink-0 ml-2" />}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="p-2 border-t border-border/60 bg-[#FAFAF8] space-y-1">
+                      <button
+                        onClick={() => {
+                          setIsLayoutDropdownOpen(false);
+                          setSaveLayoutModalOpen(true);
+                        }}
+                        className="w-full py-1.5 px-2 rounded-lg bg-white hover:bg-[#F2EBE4] border border-border text-foreground font-mono-custom font-bold text-[11px] flex items-center gap-1.5 justify-center cursor-pointer shadow-xs"
+                      >
+                        <Save size={12} className="text-accent" />
+                        <span>Save Current as...</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setIsLayoutDropdownOpen(false);
+                          setManageLayoutsModalOpen(true);
+                        }}
+                        className="w-full py-1 px-2 text-muted-foreground hover:text-foreground font-mono-custom text-[10px] text-center cursor-pointer"
+                      >
+                        Manage Layouts...
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Admin Table Form Editor Toggle */}
             {isAdmin && (
               <button
                 onClick={() => setIsEditLayoutOpen(true)}
                 className="px-4 py-2 rounded-xl border border-border bg-white hover:bg-[#F2EBE4]/50 text-foreground font-mono-custom font-medium text-xs flex items-center gap-2 transition-all shadow-xs cursor-pointer"
               >
                 <SlidersHorizontal size={13} className="text-accent" />
-                Floor Plan Editor
+                <span>Floor Plan Editor</span>
               </button>
             )}
           </div>
@@ -446,9 +862,11 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
           selectedZone={selectedZone}
           selectedTable={selectedTable}
           highlightQuery={searchFilter}
+          isAdmin={isAdmin}
           onSelectTable={(table) => setSelectedTable(table)}
           onQuickSeat={(table) => handleQuickSeat(table)}
           onUpdateStatus={(table, status) => handleUpdateStatus(table, status)}
+          onBatchUpdatePositions={handleBatchUpdatePositions}
         />
       ) : filteredTables.length === 0 ? (
         <div className="bg-white rounded-2xl p-12 border border-border text-center shadow-luxury">
@@ -867,7 +1285,7 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
                   <p className="label-mono">Configured Tables ({tables.length})</p>
                   <button
                     type="button"
-                    onClick={handleResetDefaultLayout}
+                    onClick={handleOpenResetModal}
                     className="text-xs font-mono-custom text-rose-600 hover:underline flex items-center gap-1 cursor-pointer"
                   >
                     <RotateCcw size={12} /> Reset to Blueprint Preset
@@ -929,7 +1347,262 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
           </div>
         )}
       </AnimatePresence>
+
+      {/* Save Layout Modal (Stage 11) */}
+      <AnimatePresence>
+        {saveLayoutModalOpen && (
+          <div className="fixed inset-0 z-50 bg-[#0A162B]/50 backdrop-blur-xs flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.96 }}
+              className="bg-white border border-border rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4"
+            >
+              <div className="flex items-start justify-between border-b border-border pb-3">
+                <div>
+                  <h3 className="text-xl font-bold font-display text-foreground">Save Arrangement</h3>
+                  <p className="text-xs text-muted-foreground">Snapshot current {tables.length} table coordinates & capacities</p>
+                </div>
+                <button
+                  onClick={() => setSaveLayoutModalOpen(false)}
+                  className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-[#F2EBE4]/60 cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveCurrentAsLayout} className="space-y-4">
+                <div>
+                  <label className="label-mono">Layout Name</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Friday BBQ Buffet, Christmas, Banquet"
+                    value={newLayoutName}
+                    onChange={(e) => setNewLayoutName(e.target.value)}
+                    className="w-full mt-1.5 px-3.5 py-2.5 rounded-xl border border-border bg-white text-foreground text-xs font-medium focus:outline-none focus:border-accent"
+                  />
+                  <p className="text-[10px] text-muted-foreground font-mono-custom mt-1">
+                    Live guest occupancies will not be saved, preserving service integrity.
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setSaveLayoutModalOpen(false)}
+                    className="px-3.5 py-2 rounded-xl border border-border text-xs font-mono-custom text-muted-foreground hover:bg-[#F2EBE4]/60 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSavingLayout || !newLayoutName.trim()}
+                    className="px-4 py-2 rounded-xl bg-accent text-white font-mono-custom font-bold text-xs flex items-center gap-1.5 hover:bg-accent-hover shadow-xs cursor-pointer disabled:opacity-50"
+                  >
+                    <Save size={13} />
+                    <span>{isSavingLayout ? 'Saving...' : 'Save & Activate'}</span>
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Manage Layouts Modal (Stage 11) */}
+      <AnimatePresence>
+        {manageLayoutsModalOpen && (
+          <div className="fixed inset-0 z-50 bg-[#0A162B]/50 backdrop-blur-xs flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.96 }}
+              className="bg-white border border-border rounded-2xl w-full max-w-lg p-6 shadow-2xl space-y-4 max-h-[85vh] flex flex-col"
+            >
+              <div className="flex items-start justify-between border-b border-border pb-3">
+                <div>
+                  <h3 className="text-xl font-bold font-display text-foreground">Manage Saved Layouts</h3>
+                  <p className="text-xs text-muted-foreground">Switch, overwrite, or delete restaurant floor plan presets</p>
+                </div>
+                <button
+                  onClick={() => setManageLayoutsModalOpen(false)}
+                  className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-[#F2EBE4]/60 cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto space-y-2.5 pr-1">
+                {layouts.map((l) => (
+                  <div
+                    key={l.id}
+                    className={`p-3.5 rounded-xl border transition-all flex items-center justify-between ${
+                      l.isActive
+                        ? 'bg-accent/5 border-accent/40 shadow-xs'
+                        : 'bg-white border-border hover:bg-[#F2EBE4]/30'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold font-display text-foreground">{l.name}</span>
+                        {l.isActive && (
+                          <span className="px-2 py-0.5 rounded-md text-[9px] font-mono-custom font-bold bg-accent text-white uppercase">
+                            Active
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[10px] font-mono-custom text-muted-foreground mt-0.5">
+                        {l.tables.length} tables • Updated {new Date(l.updatedAt).toLocaleDateString()}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      {!l.isActive ? (
+                        <button
+                          onClick={() => {
+                            setManageLayoutsModalOpen(false);
+                            handleApplyLayout(l);
+                          }}
+                          className="px-3 py-1.5 rounded-lg bg-white border border-border hover:border-accent text-xs font-mono-custom font-bold text-foreground cursor-pointer shadow-xs"
+                        >
+                          Apply
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleOverwriteLayout(l)}
+                          className="px-2.5 py-1.5 rounded-lg border border-border text-[11px] font-mono-custom text-muted-foreground hover:text-foreground hover:bg-white cursor-pointer"
+                          title="Overwrite with current positions"
+                        >
+                          Update
+                        </button>
+                      )}
+
+                      {l.id !== 'layout-architects-plan' && (
+                        <button
+                          onClick={() => handleDeleteLayout(l)}
+                          className="p-1.5 rounded-lg border border-border text-rose-600 hover:bg-rose-50 cursor-pointer"
+                          title="Delete layout"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Stage 10 Defect 5: In-App Modal for Reset Confirmation */}
+      <AnimatePresence>
+        {resetModalOpen && (
+          <div className="fixed inset-0 z-50 bg-[#0A162B]/50 backdrop-blur-xs flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.96 }}
+              className="bg-white border border-border rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4"
+            >
+              <div className="flex items-start justify-between border-b border-border pb-3">
+                <div className="flex items-center gap-2 text-rose-600">
+                  <AlertTriangle size={20} />
+                  <h3 className="text-xl font-bold font-display text-foreground">Reset Floor Plan</h3>
+                </div>
+                <button
+                  onClick={() => setResetModalOpen(false)}
+                  className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-[#F2EBE4]/60 cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <form onSubmit={handleConfirmResetLayout} className="space-y-4">
+                <p className="text-xs text-foreground font-sans leading-relaxed">
+                  This will reset all dining tables to the exact original architectural preset for <strong>{hotelId === 'ibis' ? 'ibis Chiang Mai' : 'Novotel Chiang Mai'}</strong>.
+                </p>
+
+                <div className="p-3 rounded-xl bg-rose-50/80 border border-rose-200 text-xs font-mono-custom text-rose-900">
+                  Type <strong className="font-bold underline">{hotelId}</strong> to confirm resetting:
+                </div>
+
+                <div>
+                  <input
+                    type="text"
+                    required
+                    placeholder={`Type ${hotelId}`}
+                    value={resetHotelInput}
+                    onChange={(e) => {
+                      setResetHotelInput(e.target.value);
+                      if (resetError) setResetError(null);
+                    }}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-border bg-white text-foreground text-xs font-mono-custom focus:outline-none focus:border-rose-500"
+                  />
+                  {resetError && (
+                    <p className="text-xs text-rose-600 font-mono-custom mt-1 font-bold">{resetError}</p>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setResetModalOpen(false)}
+                    className="px-3.5 py-2 rounded-xl border border-border text-xs font-mono-custom text-muted-foreground hover:bg-[#F2EBE4]/60 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 rounded-xl bg-rose-600 text-white font-mono-custom font-bold text-xs flex items-center gap-1.5 hover:bg-rose-700 shadow-xs cursor-pointer"
+                  >
+                    <RotateCcw size={13} />
+                    <span>Confirm Reset</span>
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Stage 11: Occupied Tables Guard In-App Warning Modal */}
+      <AnimatePresence>
+        {occupiedWarningModalOpen && (
+          <div className="fixed inset-0 z-50 bg-[#0A162B]/50 backdrop-blur-xs flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.96 }}
+              className="bg-white border border-rose-200 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4"
+            >
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-xl bg-rose-100 flex items-center justify-center text-rose-600 shrink-0">
+                  <AlertTriangle size={20} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold font-display text-foreground">Action Blocked: Seated Guests</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">Tables are currently in active service</p>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-100 text-xs font-mono-custom text-rose-900 leading-relaxed">
+                {occupiedWarningMessage}
+              </div>
+
+              <div className="flex justify-end pt-2">
+                <button
+                  onClick={() => setOccupiedWarningModalOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-[#0A162B] text-white font-mono-custom font-bold text-xs hover:bg-[#1E293B] cursor-pointer"
+                >
+                  Understood
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
-

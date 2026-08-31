@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useCallback } from 'react';
 import { DiningTable, MealServiceType, FloorFeature } from '../types';
 import { 
   NOVOTEL_PLATE, 
@@ -12,6 +12,9 @@ import {
   ZoomIn, 
   ZoomOut, 
   RotateCcw,
+  Sliders,
+  Save,
+  X,
   Check
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -23,9 +26,11 @@ interface RestaurantFloorPlan2DProps {
   selectedZone: string;
   selectedTable: DiningTable | null;
   highlightQuery?: string;
+  isAdmin?: boolean;
   onSelectTable: (table: DiningTable) => void;
   onQuickSeat: (table: DiningTable) => void;
   onUpdateStatus: (table: DiningTable, status: DiningTable['status']) => void;
+  onBatchUpdatePositions?: (updatedTables: DiningTable[]) => Promise<void>;
 }
 
 export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
@@ -35,24 +40,45 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
   selectedZone,
   selectedTable,
   highlightQuery = '',
+  isAdmin = false,
   onSelectTable,
   onQuickSeat,
   onUpdateStatus,
+  onBatchUpdatePositions,
 }) => {
+  const svgRef = useRef<SVGSVGElement>(null);
   const [zoomLevel, setZoomLevel] = useState<number>(1);
   const [hoveredTable, setHoveredTable] = useState<DiningTable | null>(null);
+
+  // Edit layout mode state
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [stagedTables, setStagedTables] = useState<DiningTable[]>(tables);
+  const [isSavingPositions, setIsSavingPositions] = useState(false);
+  const [draggingTableId, setDraggingTableId] = useState<string | null>(null);
+  const dragOffsetRef = useRef<{ offsetX: number; offsetY: number }>({ offsetX: 0, offsetY: 0 });
 
   const isIbis = hotelId === 'ibis';
   const plate = isIbis ? IBIS_PLATE : NOVOTEL_PLATE;
   const features = isIbis ? IBIS_FLOOR_FEATURES : NOVOTEL_FLOOR_FEATURES;
 
-  // Filtered tables based on zone selection
+  // Keep stagedTables synced when not actively editing
+  React.useEffect(() => {
+    if (!isEditMode) {
+      setStagedTables(tables);
+    }
+  }, [tables, isEditMode]);
+
+  // Tables to render (either live tables or staged when in edit mode)
+  const currentTables = isEditMode ? stagedTables : tables;
+
+  // Filtered tables based on zone selection (when not in edit mode)
   const visibleTables = useMemo(() => {
-    return tables.filter((t) => {
+    if (isEditMode) return currentTables; // show all tables in edit mode
+    return currentTables.filter((t) => {
       if (selectedZone === 'All') return true;
       return t.zone === selectedZone;
     });
-  }, [tables, selectedZone]);
+  }, [currentTables, selectedZone, isEditMode]);
 
   const getStatusStyles = (status: DiningTable['status']) => {
     switch (status) {
@@ -61,7 +87,7 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
           fill: isIbis ? '#DC2626' : '#1D4ED8',
           stroke: isIbis ? '#991B1B' : '#1E40AF',
           textFill: '#FFFFFF',
-          subTextFill: 'rgba(255, 255, 255, 0.85)',
+          subTextFill: 'rgba(255, 255, 255, 0.9)',
           badgeBg: isIbis ? 'bg-red-600 text-white' : 'bg-blue-600 text-white',
           label: 'Occupied',
         };
@@ -95,10 +121,207 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
     }
   };
 
+  /* --------------------------------------------------------------------------
+     POINTER DRAG-TO-MOVE HANDLERS (STAGE 11)
+     Uses svg.getScreenCTM()!.inverse() to guarantee exact viewBox translation
+     -------------------------------------------------------------------------- */
+  const handlePointerDown = (table: DiningTable, e: React.PointerEvent) => {
+    if (!isEditMode || !isAdmin) return;
+    e.stopPropagation();
+    e.preventDefault();
+
+    const svg = svgRef.current;
+    if (!svg) return;
+
+    try {
+      (e.currentTarget as Element).setPointerCapture(e.pointerId);
+    } catch {}
+
+    const pt = svg.createSVGPoint();
+    pt.x = e.clientX;
+    pt.y = e.clientY;
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return;
+    const svgPoint = pt.matrixTransform(ctm.inverse());
+
+    const curX = table.x ?? 100;
+    const curY = table.y ?? 100;
+
+    dragOffsetRef.current = {
+      offsetX: svgPoint.x - curX,
+      offsetY: svgPoint.y - curY,
+    };
+
+    setDraggingTableId(table.id);
+  };
+
+  const handlePointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (!isEditMode || !draggingTableId || !isAdmin) return;
+      e.stopPropagation();
+      e.preventDefault();
+
+      const svg = svgRef.current;
+      if (!svg) return;
+
+      const pt = svg.createSVGPoint();
+      pt.x = e.clientX;
+      pt.y = e.clientY;
+      const ctm = svg.getScreenCTM();
+      if (!ctm) return;
+      const svgPoint = pt.matrixTransform(ctm.inverse());
+
+      const rawX = svgPoint.x - dragOffsetRef.current.offsetX;
+      const rawY = svgPoint.y - dragOffsetRef.current.offsetY;
+
+      // 5-unit grid snap
+      const snappedX = Math.round(rawX / 5) * 5;
+      const snappedY = Math.round(rawY / 5) * 5;
+
+      // Clamp within plate boundaries (radius = 11 units)
+      const r = 11;
+      const clampedX = Math.max(r, Math.min(plate.w - r, snappedX));
+      const clampedY = Math.max(r, Math.min(plate.h - r, snappedY));
+
+      setStagedTables((prev) =>
+        prev.map((t) => (t.id === draggingTableId ? { ...t, x: clampedX, y: clampedY } : t))
+      );
+    },
+    [isEditMode, draggingTableId, isAdmin, plate.w, plate.h]
+  );
+
+  const handlePointerUp = (e: React.PointerEvent) => {
+    if (!isEditMode || !draggingTableId) return;
+    try {
+      (e.currentTarget as Element).releasePointerCapture(e.pointerId);
+    } catch {}
+    setDraggingTableId(null);
+  };
+
+  const handleSavePositions = async () => {
+    if (!onBatchUpdatePositions) return;
+    setIsSavingPositions(true);
+    try {
+      await onBatchUpdatePositions(stagedTables);
+      setIsEditMode(false);
+    } catch (err) {
+      console.error('Failed to save table positions:', err);
+    } finally {
+      setIsSavingPositions(false);
+    }
+  };
+
+  const handleCancelPositions = () => {
+    setStagedTables(tables);
+    setIsEditMode(false);
+    setDraggingTableId(null);
+  };
+
+  /* --------------------------------------------------------------------------
+     FEATURE RENDERING (STAGE 10 DEFECTS 1-4)
+     -------------------------------------------------------------------------- */
   const renderFeatureShape = (f: FloorFeature) => {
     const isRound = f.shape === 'round';
 
     switch (f.kind) {
+      case 'building-envelope':
+        return (
+          <rect
+            key={f.id}
+            x={f.x}
+            y={f.y}
+            width={f.w}
+            height={f.h}
+            rx={12}
+            fill="none"
+            stroke="#1E293B"
+            strokeWidth={3}
+            className="pointer-events-none select-none"
+          />
+        );
+
+      case 'dining-hall':
+        return (
+          <g key={f.id} className="pointer-events-none select-none">
+            <rect
+              x={f.x}
+              y={f.y}
+              width={f.w}
+              height={f.h}
+              rx={6}
+              fill="#FFFFFF"
+              stroke="#94A3B8"
+              strokeWidth={1.5}
+            />
+          </g>
+        );
+
+      case 'bar-room':
+        return (
+          <g key={f.id} className="pointer-events-none select-none">
+            <rect
+              x={f.x}
+              y={f.y}
+              width={f.w}
+              height={f.h}
+              rx={6}
+              fill="#F8FAFC"
+              stroke="#64748B"
+              strokeWidth={1.5}
+            />
+          </g>
+        );
+
+      case 'prep-room':
+        return (
+          <g key={f.id} className="pointer-events-none select-none">
+            <rect
+              x={f.x}
+              y={f.y}
+              width={f.w}
+              height={f.h}
+              rx={4}
+              fill="#F1F5F9"
+              stroke="#94A3B8"
+              strokeWidth={1.5}
+              strokeDasharray="4 3"
+            />
+          </g>
+        );
+
+      case 'reception':
+        return (
+          <g key={f.id} className="pointer-events-none select-none">
+            <rect
+              x={f.x}
+              y={f.y}
+              width={f.w}
+              height={f.h}
+              rx={4}
+              fill="#F8FAFC"
+              stroke="#64748B"
+              strokeWidth={1.5}
+            />
+          </g>
+        );
+
+      case 'back-of-house':
+        return (
+          <rect
+            key={f.id}
+            x={f.x}
+            y={f.y}
+            width={f.w}
+            height={f.h}
+            rx={4}
+            fill="#F1F5F9"
+            fillOpacity={0.8}
+            stroke="#94A3B8"
+            strokeWidth={1.5}
+            className="pointer-events-none select-none"
+          />
+        );
+
       case 'hostess-desk':
       case 'front-desk':
         return (
@@ -185,7 +408,7 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
               height={f.h}
               rx={6}
               fill="#CFFAFE"
-              fillOpacity={0.85}
+              fillOpacity={0.7}
               stroke="#0891B2"
               strokeWidth={1.5}
             />
@@ -209,11 +432,6 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
                 SMOKING AREA
               </text>
             </g>
-            {/* 4 unlabelled non-seatable tables inside smoking terrace */}
-            <circle cx={455} cy={355} r={11} fill="#FFFFFF" fillOpacity={0.85} stroke="#0891B2" strokeWidth={1.2} />
-            <circle cx={500} cy={355} r={11} fill="#FFFFFF" fillOpacity={0.85} stroke="#0891B2" strokeWidth={1.2} />
-            <circle cx={455} cy={400} r={11} fill="#FFFFFF" fillOpacity={0.85} stroke="#0891B2" strokeWidth={1.2} />
-            <circle cx={500} cy={400} r={11} fill="#FFFFFF" fillOpacity={0.85} stroke="#0891B2" strokeWidth={1.2} />
           </g>
         );
 
@@ -268,38 +486,21 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
 
       case 'island':
         if (isRound) {
-          // If w === h or round table/unit
-          if (f.w === f.h || f.w <= 36) {
-            return (
-              <g key={f.id} className="pointer-events-none select-none">
-                <circle
-                  cx={f.x}
-                  cy={f.y}
-                  r={f.w / 2}
-                  fill={f.id.includes('buffet') || f.id.includes('round-unit') ? '#CFFAFE' : '#E2E8F0'}
-                  stroke={f.id.includes('buffet') || f.id.includes('round-unit') ? '#0891B2' : '#94A3B8'}
-                  strokeWidth={1.2}
-                />
-              </g>
-            );
-          }
-          // Wide island (oval / rounded pill)
+          const cx = f.x + f.w / 2;
+          const cy = f.y + f.h / 2;
+          const r = f.w / 2;
           return (
-            <g key={f.id} className="pointer-events-none select-none">
-              <rect
-                x={f.x}
-                y={f.y}
-                width={f.w}
-                height={f.h}
-                rx={f.h / 2}
-                fill="#CFFAFE"
-                fillOpacity={0.9}
-                stroke="#0891B2"
-                strokeWidth={1.5}
-              />
-              <circle cx={f.x + f.w * 0.25} cy={f.y + f.h / 2} r={f.h * 0.3} fill="#A5F3FC" stroke="#06B6D4" strokeWidth={0.75} />
-              <circle cx={f.x + f.w * 0.75} cy={f.y + f.h / 2} r={f.h * 0.3} fill="#A5F3FC" stroke="#06B6D4" strokeWidth={0.75} />
-            </g>
+            <circle
+              key={f.id}
+              cx={cx}
+              cy={cy}
+              r={r}
+              fill={f.id.includes('smoking') ? '#FFFFFF' : f.id.includes('buffet') || f.id.includes('round-unit') ? '#CFFAFE' : '#E2E8F0'}
+              fillOpacity={f.id.includes('smoking') ? 0.9 : 1}
+              stroke={f.id.includes('smoking') ? '#0891B2' : f.id.includes('buffet') || f.id.includes('round-unit') ? '#0891B2' : '#94A3B8'}
+              strokeWidth={1.2}
+              className="pointer-events-none select-none"
+            />
           );
         }
         return (
@@ -349,30 +550,20 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
           />
         );
 
-      case 'back-of-house':
       default:
-        return (
-          <rect
-            key={f.id}
-            x={f.x}
-            y={f.y}
-            width={f.w}
-            height={f.h}
-            rx={4}
-            fill="#F8FAFC"
-            fillOpacity={0.75}
-            stroke="#64748B"
-            strokeWidth={1.5}
-            className="pointer-events-none select-none"
-          />
-        );
+        return null;
     }
   };
 
+  /* --------------------------------------------------------------------------
+     TABLE GLYPH RENDERING
+     -------------------------------------------------------------------------- */
   const renderTableGlyph = (table: DiningTable) => {
     const isSelected = selectedTable?.id === table.id;
     const isHovered = hoveredTable?.id === table.id;
+    const isDragging = draggingTableId === table.id;
     const isSearchMatch =
+      !isEditMode &&
       highlightQuery.trim() !== '' &&
       (table.tableNumber.toLowerCase().includes(highlightQuery.toLowerCase()) ||
         (table.occupiedByRoom &&
@@ -391,15 +582,54 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
       <g
         key={table.id}
         id={`table-glyph-${table.id}`}
+        onPointerDown={(e) => handlePointerDown(table, e)}
         onClick={(e) => {
+          if (isEditMode) return;
           e.stopPropagation();
           onSelectTable(table);
         }}
-        onMouseEnter={() => setHoveredTable(table)}
-        onMouseLeave={() => setHoveredTable(null)}
-        className="cursor-pointer transition-transform duration-150"
-        style={{ cursor: 'pointer' }}
+        onMouseEnter={() => !isEditMode && setHoveredTable(table)}
+        onMouseLeave={() => !isEditMode && setHoveredTable(null)}
+        className={`${isEditMode ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'}`}
+        style={{ cursor: isEditMode ? (isDragging ? 'grabbing' : 'grab') : 'pointer', touchAction: 'none' }}
       >
+        {/* Large 44x44 CSS hit area for touch/drag targets */}
+        <circle
+          cx={tx}
+          cy={ty}
+          r={22}
+          fill="transparent"
+          pointerEvents="all"
+          className="select-none"
+        />
+
+        {/* Dragging active halo */}
+        {isDragging && (
+          <circle
+            cx={tx}
+            cy={ty}
+            r={radius + 8}
+            fill="#3B82F6"
+            fillOpacity={0.25}
+            stroke="#2563EB"
+            strokeWidth={2}
+          />
+        )}
+
+        {/* Edit mode subtle reposition guide */}
+        {isEditMode && !isDragging && (
+          <circle
+            cx={tx}
+            cy={ty}
+            r={radius + 4}
+            fill="none"
+            stroke="#6366F1"
+            strokeWidth={1}
+            strokeDasharray="2 2"
+            opacity={0.6}
+          />
+        )}
+
         {/* Search match highlight ping */}
         {isSearchMatch && (
           <circle
@@ -415,7 +645,7 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
         )}
 
         {/* Selected table halo */}
-        {isSelected && (
+        {isSelected && !isEditMode && (
           <circle
             cx={tx}
             cy={ty}
@@ -428,7 +658,7 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
         )}
 
         {/* Hover table halo */}
-        {isHovered && !isSelected && (
+        {isHovered && !isSelected && !isEditMode && (
           <circle
             cx={tx}
             cy={ty}
@@ -475,10 +705,10 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
           />
         )}
 
-        {/* Table Label (centered at table number font size ~11) */}
+        {/* Table Label (centered at font size ~10.5) */}
         <text
           x={tx}
-          y={table.status === 'occupied' && table.occupiedByRoom ? ty - 2 : ty}
+          y={!isEditMode && table.status === 'occupied' && table.occupiedByRoom ? ty - 2 : ty}
           textAnchor="middle"
           dominantBaseline="central"
           fill={styles.textFill}
@@ -490,7 +720,7 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
         </text>
 
         {/* Sub-label: Room number if occupied, or capacity */}
-        {table.status === 'occupied' && table.occupiedByRoom ? (
+        {!isEditMode && table.status === 'occupied' && table.occupiedByRoom ? (
           <text
             x={tx}
             y={ty + 6}
@@ -517,6 +747,34 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
             {table.capacity}P
           </text>
         )}
+
+        {/* Live Coordinate display while dragging (Stage 11 requirement) */}
+        {isDragging && (
+          <g transform={`translate(${tx}, ${ty - 22})`} className="pointer-events-none select-none">
+            <rect
+              x={-30}
+              y={-10}
+              width={60}
+              height={16}
+              rx={4}
+              fill="#0F172A"
+              stroke="#38BDF8"
+              strokeWidth={1}
+            />
+            <text
+              x={0}
+              y={-1}
+              textAnchor="middle"
+              dominantBaseline="central"
+              fill="#38BDF8"
+              fontSize={7.5}
+              fontWeight="bold"
+              className="font-mono-custom"
+            >
+              {`X:${tx} Y:${ty}`}
+            </text>
+          </g>
+        )}
       </g>
     );
   };
@@ -528,7 +786,7 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
         {/* Top Blueprint Navigation & Controls Bar */}
         <div className="bg-[#0A162B] text-white px-6 py-3.5 flex flex-wrap items-center justify-between gap-4 border-b border-[#0A162B]/80">
           <div className="flex items-center gap-3">
-            <div className="w-3 h-3 rounded-full bg-emerald-400 animate-pulse" />
+            <div className={`w-3 h-3 rounded-full ${isEditMode ? 'bg-amber-400 animate-ping' : 'bg-emerald-400 animate-pulse'}`} />
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-xs font-mono-custom font-bold tracking-widest text-emerald-400 uppercase">
@@ -538,15 +796,60 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
                 <span className="text-xs font-mono-custom text-white/80">
                   {isIbis ? 'Proportion 2.24:1' : 'Proportion 2.64:1'}
                 </span>
+                {isEditMode && (
+                  <span className="ml-2 px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-mono-custom font-bold">
+                    Edit Layout Active (5-unit snap)
+                  </span>
+                )}
               </div>
               <p className="text-[11px] text-white/60 font-sans mt-0.5">
-                Live architectural floor plan with uniform viewBox scaling.
+                {isEditMode 
+                  ? 'Drag tables to reposition. Positions snap to a 5-unit grid and stay inside the plate.' 
+                  : 'Live architectural floor plan with uniform viewBox scaling.'}
               </p>
             </div>
           </div>
 
-          {/* Zoom Controls */}
-          <div className="flex items-center gap-2">
+          {/* Action & Zoom Controls */}
+          <div className="flex items-center gap-2.5">
+            {/* Admin Edit Layout Mode Toggle */}
+            {isAdmin && !isEditMode && (
+              <button
+                onClick={() => {
+                  setStagedTables(tables);
+                  setIsEditMode(true);
+                }}
+                className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-mono-custom font-semibold text-xs flex items-center gap-1.5 border border-white/15 transition-all cursor-pointer"
+                title="Reposition tables directly on the blueprint"
+              >
+                <Sliders size={13} className="text-amber-400" />
+                <span>Edit Layout</span>
+              </button>
+            )}
+
+            {/* Edit Mode Staged Save / Cancel Controls */}
+            {isAdmin && isEditMode && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleSavePositions}
+                  disabled={isSavingPositions}
+                  className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-mono-custom font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                >
+                  <Save size={13} />
+                  <span>{isSavingPositions ? 'Saving...' : 'Save positions'}</span>
+                </button>
+                <button
+                  onClick={handleCancelPositions}
+                  disabled={isSavingPositions}
+                  className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white/90 font-mono-custom font-medium text-xs flex items-center gap-1 border border-white/15 transition-all cursor-pointer"
+                >
+                  <X size={13} />
+                  <span>Cancel</span>
+                </button>
+              </div>
+            )}
+
+            {/* Zoom Controls */}
             <div className="flex items-center bg-white/10 rounded-xl p-1 border border-white/10 text-xs font-mono-custom">
               <button
                 onClick={() => setZoomLevel((z) => Math.max(0.8, Number((z - 0.1).toFixed(1))))}
@@ -577,19 +880,26 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
         </div>
 
         {/* Blueprint Map Surface */}
-        <div className="relative w-full overflow-auto p-4 md:p-8 flex justify-center items-center bg-[#F7F5F0]">
+        <div 
+          className="relative w-full overflow-auto p-4 md:p-8 flex justify-center items-center bg-[#F7F5F0]"
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+        >
           <div
             style={{
               transform: `scale(${zoomLevel})`,
               transformOrigin: 'center center',
-              transition: 'transform 0.2s ease-out',
+              transition: draggingTableId ? 'none' : 'transform 0.2s ease-out',
             }}
             className="w-full flex justify-center"
           >
             <svg
+              ref={svgRef}
               viewBox={`0 0 ${plate.w} ${plate.h}`}
               preserveAspectRatio="xMidYMid meet"
-              className="w-full h-auto max-w-[1100px] bg-white rounded-2xl border-2 border-stone-400/80 shadow-xl select-none"
+              className={`w-full h-auto max-w-[1100px] bg-white rounded-2xl border-2 border-stone-400/80 shadow-xl select-none ${
+                isEditMode ? 'ring-2 ring-amber-400/40' : ''
+              }`}
               role="img"
               aria-label={`${isIbis ? "Charlie's Corner" : 'Food Exchange and Gourmet Bar'} floor plan`}
             >
@@ -598,16 +908,25 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
                 <pattern id="blueprint-grid" width="20" height="20" patternUnits="userSpaceOnUse">
                   <circle cx="10" cy="10" r="0.75" fill="#0A162B" fillOpacity="0.1" />
                 </pattern>
+                {/* Snap guide grid for edit mode */}
+                {isEditMode && (
+                  <pattern id="snap-grid" width="20" height="20" patternUnits="userSpaceOnUse">
+                    <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#6366F1" strokeWidth="0.5" strokeOpacity="0.15" />
+                  </pattern>
+                )}
               </defs>
 
-              {/* Building Envelope Canvas Background */}
-              <rect x="0" y="0" width={plate.w} height={plate.h} rx="16" fill="#FFFFFF" />
-              <rect x="0" y="0" width={plate.w} height={plate.h} rx="16" fill="url(#blueprint-grid)" />
+              {/* Canvas Background */}
+              <rect x="0" y="0" width={plate.w} height={plate.h} rx="12" fill="#FFFFFF" />
+              <rect x="0" y="0" width={plate.w} height={plate.h} rx="12" fill="url(#blueprint-grid)" />
+              {isEditMode && (
+                <rect x="0" y="0" width={plate.w} height={plate.h} rx="12" fill="url(#snap-grid)" />
+              )}
 
-              {/* 1. Render all non-table architectural features behind tables */}
+              {/* 1. Render all non-table architectural features (rooms, walls, counters, etc.) behind tables */}
               {features.map((f) => renderFeatureShape(f))}
 
-              {/* 2. Render all selectable interactive dining tables */}
+              {/* 2. Render all selectable / draggable dining tables */}
               {visibleTables.map((t) => renderTableGlyph(t))}
             </svg>
           </div>
@@ -649,18 +968,18 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
             </span>
             <span className="text-muted-foreground">•</span>
             <span className="text-muted-foreground">
-              Total Seats:{' '}
+              Total Capacity:{' '}
               <strong className="text-foreground">
-                {visibleTables.reduce((a, t) => a + t.capacity, 0)}
+                {visibleTables.reduce((a, t) => a + t.capacity, 0)} Seats
               </strong>
             </span>
           </div>
         </div>
       </div>
 
-      {/* Selected Table Quick Info Card */}
+      {/* Selected Table Quick Info Card (hidden in edit mode) */}
       <AnimatePresence>
-        {selectedTable && (
+        {selectedTable && !isEditMode && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
