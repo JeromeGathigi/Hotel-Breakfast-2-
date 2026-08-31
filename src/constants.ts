@@ -108,14 +108,14 @@ export const OVER_CAPACITY_REASONS = {
   OTHER: 'OTHER',
 };
 
-// Provisional capacities pending confirmation from restaurant management
-// Novotel: Rows A, B, C = 2 seats, BAR1-BAR6 = 4 seats
-// ibis: Rows C, B = 4 seats, Row A = 2 seats
+// Table capacities:
+// Novotel: Rows A, B, C (A1 to C5) = 4 seats, BAR1-BAR6 = 4 seats
+// ibis: Rows A, B, C (A1 to C4) = 4 seats
 const PROVISIONAL_CAPACITIES = {
-  novotelMainDining: 2,
+  novotelMainDining: 4,
   novotelGourmetBar: 4,
   ibisRowsCB: 4,
-  ibisRowA: 2,
+  ibisRowA: 4,
 };
 
 export interface FloorPlate {

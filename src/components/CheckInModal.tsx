@@ -15,6 +15,11 @@ import {
   hasMealEntitlement, 
   availableOverCapacityReasons 
 } from '../lib/meals';
+import {
+  effectiveCapacity,
+  getCombinedTableNumber,
+  seatableTables,
+} from '../lib/tables';
 import { 
   X, 
   Users, 
@@ -109,7 +114,8 @@ export const CheckInModal: React.FC<CheckInModalProps> = ({
     const recordedBy = currentUser?.email || 'staff@novotel-chiangmai.com';
 
     try {
-      const tableObj = selectedTable ? availableTables.find((t) => t.tableNumber === selectedTable) : null;
+      const seatable = seatableTables(availableTables);
+      const tableObj = selectedTable ? seatable.find((t) => t.tableNumber === selectedTable || getCombinedTableNumber(t, availableTables) === selectedTable) : null;
       const checkInDoc: CheckIn = {
         roomNumber: guest.roomNumber,
         guestName: guest.guestName,
@@ -121,7 +127,7 @@ export const CheckInModal: React.FC<CheckInModalProps> = ({
         childrenAte,
         infantsAte,
         recordedBy,
-        tableNumber: selectedTable || null,
+        tableNumber: tableObj ? getCombinedTableNumber(tableObj, availableTables) : (selectedTable || null),
         tableId: tableObj?.id || null,
         overCapacityReasons: isOverCapacity || isUnentitled ? overCapacityReasons : [],
         overCapacityOtherReason: overCapacityOther,
@@ -132,17 +138,26 @@ export const CheckInModal: React.FC<CheckInModalProps> = ({
       const docRef = doc(db, 'hotels', hotelId, 'checkins', today, 'rooms', guest.roomNumber);
       await setDoc(docRef, checkInDoc);
 
-      // If table assigned, mark table as occupied
+      // If table assigned, mark primary table and any child tables as occupied
       if (tableObj) {
-        const tRef = doc(db, 'hotels', hotelId, 'tables', tableObj.id);
-        await updateDoc(tRef, {
+        const occPayload = {
           status: 'occupied',
           occupiedByRoom: guest.roomNumber,
           occupiedByGuest: guest.guestName,
           occupiedPax: totalHeadcount,
           occupiedSince: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           mealService,
-        });
+        };
+
+        const tRef = doc(db, 'hotels', hotelId, 'tables', tableObj.id);
+        await updateDoc(tRef, occPayload);
+
+        if (tableObj.mergedTables && tableObj.mergedTables.length > 0) {
+          for (const childId of tableObj.mergedTables) {
+            const cRef = doc(db, 'hotels', hotelId, 'tables', childId);
+            await updateDoc(cRef, occPayload);
+          }
+        }
       }
 
       // Log Opera Audit Trail
@@ -343,11 +358,15 @@ export const CheckInModal: React.FC<CheckInModalProps> = ({
               className="w-full px-3.5 py-2.5 rounded-xl border border-border bg-white text-foreground text-xs font-mono-custom focus:outline-none focus:border-accent shadow-xs"
             >
               <option value="">No table assigned yet (Walk-in / Host Stand Queue)</option>
-              {availableTables.map((t) => (
-                <option key={t.id} value={t.tableNumber}>
-                  Table {t.tableNumber} • {t.zone} ({t.capacity} Seats) {t.status === 'occupied' ? '• (Occupied)' : ''}
-                </option>
-              ))}
+              {seatableTables(availableTables).map((t) => {
+                const combinedNum = getCombinedTableNumber(t, availableTables);
+                const cap = effectiveCapacity(t, availableTables);
+                return (
+                  <option key={t.id} value={combinedNum}>
+                    Table {combinedNum} • {t.zone} ({cap} Seats) {t.status === 'occupied' ? '• (Occupied)' : ''}
+                  </option>
+                );
+              })}
             </select>
           </div>
 

@@ -108,6 +108,10 @@ export interface DiningTable {
   height?: number;
   rotation?: number;
   isSmoking?: boolean;
+  /** Id of the table this one has been merged into. Null/absent when standalone. */
+  mergedInto?: string | null;
+  /** Ids merged into this table. Only ever set on the primary of a group. */
+  mergedTables?: string[];
 }
 
 export interface FloorFeature {
@@ -133,6 +137,8 @@ export interface TableLayoutEntry {
   y: number;
   shape?: 'rectangle' | 'square' | 'round' | 'booth' | 'diamond' | 'bar_seat' | 'lounge' | 'semi_circle';
   isSmoking?: boolean;
+  mergedInto?: string | null;
+  mergedTables?: string[];
 }
 
 export interface TableLayout {

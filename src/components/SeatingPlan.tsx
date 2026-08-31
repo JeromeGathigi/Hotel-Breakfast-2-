@@ -283,7 +283,7 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
       const newTable: DiningTable = {
         id: tableId,
         tableNumber: editingTable.tableNumber.trim().toUpperCase(),
-        capacity: Number(editingTable.capacity) || 2,
+        capacity: Number(editingTable.capacity) || 4,
         zone: (editingTable.zone as any) || (hotelId === 'ibis' ? 'Delhi Street' : 'Main Dining'),
         status: (editingTable.status as any) || 'available',
         x: editingTable.x || 40,
@@ -1207,7 +1207,7 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
                       min="1"
                       max="20"
                       required
-                      value={editingTable?.capacity || 2}
+                      value={editingTable?.capacity || 4}
                       onChange={(e) => setEditingTable((prev) => ({ ...prev, capacity: Number(e.target.value) }))}
                       className="w-full mt-1 px-3 py-2 rounded-xl border border-border bg-white text-foreground text-xs font-mono-custom focus:outline-none focus:border-accent"
                     />

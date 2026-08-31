@@ -1,11 +1,18 @@
 import React, { useState, useMemo, useRef, useCallback } from 'react';
-import { DiningTable, MealServiceType, FloorFeature } from '../types';
+import { DiningTable, MealServiceType, FloorFeature, TableLayout } from '../types';
 import { 
   NOVOTEL_PLATE, 
   IBIS_PLATE, 
   NOVOTEL_FLOOR_FEATURES, 
   IBIS_FLOOR_FEATURES 
 } from '../constants';
+import { 
+  effectiveCapacity, 
+  seatableTables, 
+  getCombinedTableNumber, 
+  getMergedGroupMembers, 
+  validateMerge 
+} from '../lib/tables';
 import { 
   Users, 
   Cigarette, 
@@ -15,7 +22,11 @@ import {
   Sliders,
   Save,
   X,
-  Check
+  Check,
+  Layers,
+  Split,
+  Link as LinkIcon,
+  AlertCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -27,10 +38,13 @@ interface RestaurantFloorPlan2DProps {
   selectedTable: DiningTable | null;
   highlightQuery?: string;
   isAdmin?: boolean;
+  activeLayout?: TableLayout | null;
   onSelectTable: (table: DiningTable) => void;
   onQuickSeat: (table: DiningTable) => void;
   onUpdateStatus: (table: DiningTable, status: DiningTable['status']) => void;
   onBatchUpdatePositions?: (updatedTables: DiningTable[]) => Promise<void>;
+  onMergeTables?: (tablesToMerge: DiningTable[]) => Promise<void>;
+  onUnmergeTable?: (table: DiningTable) => Promise<void>;
 }
 
 export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
@@ -41,10 +55,13 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
   selectedTable,
   highlightQuery = '',
   isAdmin = false,
+  activeLayout = null,
   onSelectTable,
   onQuickSeat,
   onUpdateStatus,
   onBatchUpdatePositions,
+  onMergeTables,
+  onUnmergeTable,
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const [zoomLevel, setZoomLevel] = useState<number>(1);
@@ -56,6 +73,12 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
   const [isSavingPositions, setIsSavingPositions] = useState(false);
   const [draggingTableId, setDraggingTableId] = useState<string | null>(null);
   const dragOffsetRef = useRef<{ offsetX: number; offsetY: number }>({ offsetX: 0, offsetY: 0 });
+
+  // Merge mode state
+  const [isMergeMode, setIsMergeMode] = useState(false);
+  const [selectedMergeIds, setSelectedMergeIds] = useState<Set<string>>(new Set());
+  const [mergeError, setMergeError] = useState<string | null>(null);
+  const [isMerging, setIsMerging] = useState(false);
 
   const isIbis = hotelId === 'ibis';
   const plate = isIbis ? IBIS_PLATE : NOVOTEL_PLATE;
@@ -214,7 +237,49 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
   const handleCancelPositions = () => {
     setStagedTables(tables);
     setIsEditMode(false);
-    setDraggingTableId(null);
+  };
+
+  // Toggle selection for merge mode
+  const handleToggleMergeSelect = (table: DiningTable) => {
+    const next = new Set(selectedMergeIds);
+    // If table is in a merged group, toggle all group members
+    const group = getMergedGroupMembers(table, tables);
+    const hasAny = group.some((m) => next.has(m.id));
+
+    if (hasAny) {
+      for (const m of group) {
+        next.delete(m.id);
+      }
+    } else {
+      for (const m of group) {
+        next.add(m.id);
+      }
+    }
+
+    setSelectedMergeIds(next);
+    setMergeError(null);
+  };
+
+  const handleExecuteMerge = async () => {
+    if (!onMergeTables) return;
+    const selected = tables.filter((t) => selectedMergeIds.has(t.id));
+    const validation = validateMerge(selected, tables);
+    if (!validation.valid) {
+      setMergeError(validation.reason || 'Cannot merge selected tables');
+      return;
+    }
+
+    setIsMerging(true);
+    try {
+      await onMergeTables(selected);
+      setIsMergeMode(false);
+      setSelectedMergeIds(new Set());
+      setMergeError(null);
+    } catch (err: any) {
+      setMergeError(err.message || 'Failed to merge tables');
+    } finally {
+      setIsMerging(false);
+    }
   };
 
   /* --------------------------------------------------------------------------
@@ -559,13 +624,27 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
      TABLE GLYPH RENDERING
      -------------------------------------------------------------------------- */
   const renderTableGlyph = (table: DiningTable) => {
-    const isSelected = selectedTable?.id === table.id;
-    const isHovered = hoveredTable?.id === table.id;
+    const isChild = Boolean(table.mergedInto);
+    const isPrimary = Boolean(table.mergedTables && table.mergedTables.length > 0);
+    const groupMembers = getMergedGroupMembers(table, currentTables);
+    const primaryTable = isChild
+      ? currentTables.find((t) => t.id === table.mergedInto) || table
+      : table;
+
+    const isSelected = selectedTable?.id === table.id || (selectedTable && isChild && selectedTable.id === primaryTable.id);
+    const isHovered = hoveredTable?.id === table.id || (hoveredTable && isChild && hoveredTable.id === primaryTable.id);
     const isDragging = draggingTableId === table.id;
+    const isMergeSelected = selectedMergeIds.has(table.id);
+
+    const combinedLabel = getCombinedTableNumber(table, currentTables);
+    const effCap = effectiveCapacity(table, currentTables);
+
     const isSearchMatch =
       !isEditMode &&
+      !isMergeMode &&
       highlightQuery.trim() !== '' &&
-      (table.tableNumber.toLowerCase().includes(highlightQuery.toLowerCase()) ||
+      (combinedLabel.toLowerCase().includes(highlightQuery.toLowerCase()) ||
+        table.tableNumber.toLowerCase().includes(highlightQuery.toLowerCase()) ||
         (table.occupiedByRoom &&
           table.occupiedByRoom.toLowerCase().includes(highlightQuery.toLowerCase())) ||
         (table.occupiedByGuest &&
@@ -578,6 +657,10 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
     const isDiamond = table.shape === 'diamond';
     const isRound = table.shape === 'round';
 
+    const isLayoutMerged = activeLayout?.tables.some(
+      (e) => (e.id === table.id && e.mergedTables && e.mergedTables.length > 0) || (e.id === table.id && e.mergedInto)
+    );
+
     return (
       <g
         key={table.id}
@@ -586,12 +669,25 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
         onClick={(e) => {
           if (isEditMode) return;
           e.stopPropagation();
-          onSelectTable(table);
+          if (isMergeMode) {
+            handleToggleMergeSelect(table);
+          } else {
+            onSelectTable(isChild ? primaryTable : table);
+          }
         }}
         onMouseEnter={() => !isEditMode && setHoveredTable(table)}
         onMouseLeave={() => !isEditMode && setHoveredTable(null)}
-        className={`${isEditMode ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'}`}
-        style={{ cursor: isEditMode ? (isDragging ? 'grabbing' : 'grab') : 'pointer', touchAction: 'none' }}
+        className={`${
+          isEditMode
+            ? 'cursor-grab active:cursor-grabbing'
+            : isMergeMode
+            ? 'cursor-pointer'
+            : 'cursor-pointer'
+        }`}
+        style={{
+          cursor: isEditMode ? (isDragging ? 'grabbing' : 'grab') : 'pointer',
+          touchAction: 'none',
+        }}
       >
         {/* Large 44x44 CSS hit area for touch/drag targets */}
         <circle
@@ -613,6 +709,20 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
             fillOpacity={0.25}
             stroke="#2563EB"
             strokeWidth={2}
+          />
+        )}
+
+        {/* Merge Selection Highlight */}
+        {isMergeMode && isMergeSelected && (
+          <circle
+            cx={tx}
+            cy={ty}
+            r={radius + 6}
+            fill="#6366F1"
+            fillOpacity={0.3}
+            stroke="#4F46E5"
+            strokeWidth={2.5}
+            className="animate-pulse"
           />
         )}
 
@@ -645,7 +755,7 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
         )}
 
         {/* Selected table halo */}
-        {isSelected && !isEditMode && (
+        {isSelected && !isEditMode && !isMergeMode && (
           <circle
             cx={tx}
             cy={ty}
@@ -658,7 +768,7 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
         )}
 
         {/* Hover table halo */}
-        {isHovered && !isSelected && !isEditMode && (
+        {isHovered && !isSelected && !isEditMode && !isMergeMode && (
           <circle
             cx={tx}
             cy={ty}
@@ -680,7 +790,8 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
               rx={3}
               fill={styles.fill}
               stroke={styles.stroke}
-              strokeWidth={1.5}
+              strokeWidth={isPrimary || isChild ? 2 : 1.5}
+              strokeDasharray={!isLayoutMerged && (isPrimary || isChild) ? '3 1.5' : undefined}
             />
           </g>
         ) : isRound ? (
@@ -690,7 +801,8 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
             r={radius}
             fill={styles.fill}
             stroke={styles.stroke}
-            strokeWidth={1.5}
+            strokeWidth={isPrimary || isChild ? 2 : 1.5}
+            strokeDasharray={!isLayoutMerged && (isPrimary || isChild) ? '3 1.5' : undefined}
           />
         ) : (
           <rect
@@ -701,51 +813,86 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
             rx={3}
             fill={styles.fill}
             stroke={styles.stroke}
-            strokeWidth={1.5}
+            strokeWidth={isPrimary || isChild ? 2 : 1.5}
+            strokeDasharray={!isLayoutMerged && (isPrimary || isChild) ? '3 1.5' : undefined}
           />
         )}
 
-        {/* Table Label (centered at font size ~10.5) */}
-        <text
-          x={tx}
-          y={!isEditMode && table.status === 'occupied' && table.occupiedByRoom ? ty - 2 : ty}
-          textAnchor="middle"
-          dominantBaseline="central"
-          fill={styles.textFill}
-          fontSize={10.5}
-          fontWeight="900"
-          className="font-mono-custom select-none pointer-events-none"
-        >
-          {table.tableNumber}
-        </text>
+        {/* Primary or Standalone Table Content */}
+        {!isChild ? (
+          <>
+            {/* Table Label */}
+            <text
+              x={tx}
+              y={!isEditMode && table.status === 'occupied' && table.occupiedByRoom ? ty - 2 : ty}
+              textAnchor="middle"
+              dominantBaseline="central"
+              fill={styles.textFill}
+              fontSize={combinedLabel.length > 5 ? 7.5 : combinedLabel.length > 3 ? 9 : 10.5}
+              fontWeight="900"
+              className="font-mono-custom select-none pointer-events-none"
+            >
+              {combinedLabel}
+            </text>
 
-        {/* Sub-label: Room number if occupied, or capacity */}
-        {!isEditMode && table.status === 'occupied' && table.occupiedByRoom ? (
-          <text
-            x={tx}
-            y={ty + 6}
-            textAnchor="middle"
-            dominantBaseline="central"
-            fill={styles.subTextFill}
-            fontSize={6.5}
-            fontWeight="800"
-            className="font-mono-custom select-none pointer-events-none"
-          >
-            R{table.occupiedByRoom}
-          </text>
+            {/* Sub-label: Room number if occupied, or total effective capacity */}
+            {!isEditMode && table.status === 'occupied' && table.occupiedByRoom ? (
+              <text
+                x={tx}
+                y={ty + 6}
+                textAnchor="middle"
+                dominantBaseline="central"
+                fill={styles.subTextFill}
+                fontSize={6.5}
+                fontWeight="800"
+                className="font-mono-custom select-none pointer-events-none"
+              >
+                R{table.occupiedByRoom}
+              </text>
+            ) : (
+              <text
+                x={tx}
+                y={ty + 6.5}
+                textAnchor="middle"
+                dominantBaseline="central"
+                fill={styles.subTextFill}
+                fontSize={6}
+                fontWeight="700"
+                className="font-mono-custom select-none pointer-events-none opacity-80"
+              >
+                {effCap}P
+              </text>
+            )}
+          </>
         ) : (
-          <text
-            x={tx}
-            y={ty + 6.5}
-            textAnchor="middle"
-            dominantBaseline="central"
-            fill={styles.subTextFill}
-            fontSize={6}
-            fontWeight="700"
-            className="font-mono-custom select-none pointer-events-none opacity-80"
-          >
-            {table.capacity}P
-          </text>
+          /* Child Table Content (linked visual icon / dot, no independent number) */
+          <g className="pointer-events-none select-none">
+            <circle cx={tx} cy={ty} r={3.5} fill={styles.stroke} opacity={0.8} />
+            <text
+              x={tx}
+              y={ty + 6.5}
+              textAnchor="middle"
+              dominantBaseline="central"
+              fill={styles.subTextFill}
+              fontSize={5.5}
+              fontWeight="700"
+              className="font-mono-custom opacity-70"
+            >
+              Link
+            </text>
+          </g>
+        )}
+
+        {/* Merge selection indicator badge */}
+        {isMergeMode && isMergeSelected && (
+          <circle
+            cx={tx + radius - 2}
+            cy={ty - radius + 2}
+            r={5}
+            fill="#4F46E5"
+            stroke="#FFFFFF"
+            strokeWidth={1.5}
+          />
         )}
 
         {/* Live Coordinate display while dragging (Stage 11 requirement) */}
@@ -786,7 +933,15 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
         {/* Top Blueprint Navigation & Controls Bar */}
         <div className="bg-[#0A162B] text-white px-6 py-3.5 flex flex-wrap items-center justify-between gap-4 border-b border-[#0A162B]/80">
           <div className="flex items-center gap-3">
-            <div className={`w-3 h-3 rounded-full ${isEditMode ? 'bg-amber-400 animate-ping' : 'bg-emerald-400 animate-pulse'}`} />
+            <div
+              className={`w-3 h-3 rounded-full ${
+                isEditMode
+                  ? 'bg-amber-400 animate-ping'
+                  : isMergeMode
+                  ? 'bg-indigo-400 animate-pulse'
+                  : 'bg-emerald-400 animate-pulse'
+              }`}
+            />
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-xs font-mono-custom font-bold tracking-widest text-emerald-400 uppercase">
@@ -801,10 +956,17 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
                     Edit Layout Active (5-unit snap)
                   </span>
                 )}
+                {isMergeMode && (
+                  <span className="ml-2 px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 text-[10px] font-mono-custom font-bold">
+                    Merge Selection Active ({selectedMergeIds.size} selected)
+                  </span>
+                )}
               </div>
               <p className="text-[11px] text-white/60 font-sans mt-0.5">
-                {isEditMode 
-                  ? 'Drag tables to reposition. Positions snap to a 5-unit grid and stay inside the plate.' 
+                {isEditMode
+                  ? 'Drag tables to reposition. Positions snap to a 5-unit grid and stay inside the plate.'
+                  : isMergeMode
+                  ? 'Click 2 or more tables in the same zone to merge them into a combined table.'
                   : 'Live architectural floor plan with uniform viewBox scaling.'}
               </p>
             </div>
@@ -812,8 +974,50 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
 
           {/* Action & Zoom Controls */}
           <div className="flex items-center gap-2.5">
+            {/* Merge Mode Toggle (When not editing) */}
+            {!isEditMode && onMergeTables && (
+              <>
+                {!isMergeMode ? (
+                  <button
+                    onClick={() => {
+                      setIsMergeMode(true);
+                      setSelectedMergeIds(new Set());
+                      setMergeError(null);
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-indigo-900/60 hover:bg-indigo-800 text-indigo-200 font-mono-custom font-semibold text-xs flex items-center gap-1.5 border border-indigo-500/30 transition-all cursor-pointer"
+                    title="Combine multiple tables in the same zone"
+                  >
+                    <Layers size={13} className="text-indigo-400" />
+                    <span>Merge Tables</span>
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleExecuteMerge}
+                      disabled={selectedMergeIds.size < 2 || isMerging}
+                      className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-mono-custom font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-40"
+                    >
+                      <Layers size={13} />
+                      <span>{isMerging ? 'Merging...' : `Merge (${selectedMergeIds.size})`}</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setIsMergeMode(false);
+                        setSelectedMergeIds(new Set());
+                        setMergeError(null);
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white/90 font-mono-custom font-medium text-xs flex items-center gap-1 border border-white/15 transition-all cursor-pointer"
+                    >
+                      <X size={13} />
+                      <span>Cancel</span>
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+
             {/* Admin Edit Layout Mode Toggle */}
-            {isAdmin && !isEditMode && (
+            {isAdmin && !isEditMode && !isMergeMode && (
               <button
                 onClick={() => {
                   setStagedTables(tables);
@@ -879,8 +1083,24 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
           </div>
         </div>
 
+        {/* Merge Error Toast / Banner if present */}
+        {mergeError && (
+          <div className="bg-red-500/15 border-b border-red-500/30 px-6 py-2 flex items-center justify-between text-xs text-red-700 font-mono-custom">
+            <div className="flex items-center gap-2">
+              <AlertCircle size={14} className="text-red-600 shrink-0" />
+              <span>{mergeError}</span>
+            </div>
+            <button
+              onClick={() => setMergeError(null)}
+              className="text-red-700 hover:text-red-900 font-bold ml-4 cursor-pointer"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
+
         {/* Blueprint Map Surface */}
-        <div 
+        <div
           className="relative w-full overflow-auto p-4 md:p-8 flex justify-center items-center bg-[#F7F5F0]"
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
@@ -898,7 +1118,11 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
               viewBox={`0 0 ${plate.w} ${plate.h}`}
               preserveAspectRatio="xMidYMid meet"
               className={`w-full h-auto max-w-[1100px] bg-white rounded-2xl border-2 border-stone-400/80 shadow-xl select-none ${
-                isEditMode ? 'ring-2 ring-amber-400/40' : ''
+                isEditMode
+                  ? 'ring-2 ring-amber-400/40'
+                  : isMergeMode
+                  ? 'ring-2 ring-indigo-500/50'
+                  : ''
               }`}
               role="img"
               aria-label={`${isIbis ? "Charlie's Corner" : 'Food Exchange and Gourmet Bar'} floor plan`}
@@ -911,7 +1135,13 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
                 {/* Snap guide grid for edit mode */}
                 {isEditMode && (
                   <pattern id="snap-grid" width="20" height="20" patternUnits="userSpaceOnUse">
-                    <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#6366F1" strokeWidth="0.5" strokeOpacity="0.15" />
+                    <path
+                      d="M 20 0 L 0 0 0 20"
+                      fill="none"
+                      stroke="#6366F1"
+                      strokeWidth={0.5}
+                      strokeOpacity="0.15"
+                    />
                   </pattern>
                 )}
               </defs>
@@ -923,10 +1153,59 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
                 <rect x="0" y="0" width={plate.w} height={plate.h} rx="12" fill="url(#snap-grid)" />
               )}
 
-              {/* 1. Render all non-table architectural features (rooms, walls, counters, etc.) behind tables */}
+              {/* 1. Render all non-table architectural features */}
               {features.map((f) => renderFeatureShape(f))}
 
-              {/* 2. Render all selectable / draggable dining tables */}
+              {/* 2. Visual connector bridges between primary and child tables */}
+              {currentTables
+                .filter((t) => t.mergedTables && t.mergedTables.length > 0)
+                .map((primary) => {
+                  const pX = primary.x ?? 100;
+                  const pY = primary.y ?? 100;
+                  const pStyles = getStatusStyles(primary.status);
+                  const isLayoutMerged = activeLayout?.tables.some(
+                    (e) => e.id === primary.id && e.mergedTables && e.mergedTables.length > 0
+                  );
+
+                  return (
+                    <g key={`group-bridge-${primary.id}`} className="pointer-events-none">
+                      {primary.mergedTables?.map((childId) => {
+                        const child = currentTables.find((c) => c.id === childId);
+                        if (!child) return null;
+                        const cX = child.x ?? 100;
+                        const cY = child.y ?? 100;
+
+                        return (
+                          <g key={`link-${primary.id}-${childId}`}>
+                            {/* Inner wide connection line */}
+                            <line
+                              x1={pX}
+                              y1={pY}
+                              x2={cX}
+                              y2={cY}
+                              stroke={pStyles.fill}
+                              strokeWidth={14}
+                              strokeLinecap="round"
+                            />
+                            {/* Edge strokes */}
+                            <line
+                              x1={pX}
+                              y1={pY}
+                              x2={cX}
+                              y2={cY}
+                              stroke={pStyles.stroke}
+                              strokeWidth={2}
+                              strokeDasharray={isLayoutMerged ? undefined : '4 3'}
+                              strokeLinecap="round"
+                            />
+                          </g>
+                        );
+                      })}
+                    </g>
+                  );
+                })}
+
+              {/* 3. Render all dining tables */}
               {visibleTables.map((t) => renderTableGlyph(t))}
             </svg>
           </div>
@@ -942,7 +1221,11 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
               <span className="text-foreground">Available</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <span className={`w-3.5 h-3.5 rounded-md ${isIbis ? 'bg-red-600' : 'bg-blue-600'} border ${isIbis ? 'border-red-700' : 'border-blue-700'}`} />
+              <span
+                className={`w-3.5 h-3.5 rounded-md ${
+                  isIbis ? 'bg-red-600' : 'bg-blue-600'
+                } border ${isIbis ? 'border-red-700' : 'border-blue-700'}`}
+              />
               <span className="text-foreground font-semibold">Occupied</span>
             </div>
             <div className="flex items-center gap-1.5">
@@ -959,132 +1242,172 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
                 <span>Smoking Allowed Zone</span>
               </div>
             )}
+            <div className="flex items-center gap-1.5 border-l border-border pl-3 text-indigo-700">
+              <Layers size={13} />
+              <span>Merged Group</span>
+            </div>
           </div>
 
           {/* Table Count Summary */}
           <div className="flex items-center gap-3 text-xs font-mono-custom">
             <span className="text-muted-foreground">
-              Showing <strong className="text-foreground">{visibleTables.length}</strong> tables
+              Showing <strong className="text-foreground">{seatableTables(visibleTables).length}</strong> seatable tables
             </span>
             <span className="text-muted-foreground">•</span>
             <span className="text-muted-foreground">
               Total Capacity:{' '}
               <strong className="text-foreground">
-                {visibleTables.reduce((a, t) => a + t.capacity, 0)} Seats
+                {seatableTables(visibleTables).reduce(
+                  (a, t) => a + effectiveCapacity(t, visibleTables),
+                  0
+                )}{' '}
+                Seats
               </strong>
             </span>
           </div>
         </div>
       </div>
 
-      {/* Selected Table Quick Info Card (hidden in edit mode) */}
+      {/* Selected Table Quick Info Card */}
       <AnimatePresence>
-        {selectedTable && !isEditMode && (
+        {selectedTable && !isEditMode && !isMergeMode && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 10 }}
             className="bg-white rounded-2xl p-5 border-2 border-accent/40 shadow-luxury flex flex-col md:flex-row md:items-center justify-between gap-4"
           >
-            <div className="flex items-start gap-4">
-              <div
-                className={`w-14 h-14 rounded-2xl flex flex-col items-center justify-center border font-mono-custom font-extrabold text-lg shadow-sm ${
-                  selectedTable.status === 'occupied'
-                    ? `${isIbis ? 'bg-red-600 border-red-700' : 'bg-blue-600 border-blue-700'} text-white`
-                    : selectedTable.status === 'available'
-                    ? 'bg-emerald-50 text-emerald-800 border-emerald-400'
-                    : 'bg-amber-50 text-amber-900 border-amber-400'
-                }`}
-              >
-                <span>{selectedTable.tableNumber}</span>
-                <span className="text-[9px] font-medium opacity-80">{selectedTable.capacity} Seats</span>
-              </div>
+            {(() => {
+              const members = getMergedGroupMembers(selectedTable, tables);
+              const isMergedGroup = members.length > 1;
+              const combinedNum = getCombinedTableNumber(selectedTable, tables);
+              const effCap = effectiveCapacity(selectedTable, tables);
+              const isOccupied = selectedTable.status === 'occupied';
 
-              <div>
-                <div className="flex items-center gap-2">
-                  <h4 className="text-lg font-bold font-display text-foreground">
-                    Table {selectedTable.tableNumber} • {selectedTable.zone}
-                  </h4>
-                  <span
-                    className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-mono-custom font-bold uppercase ${
-                      selectedTable.status === 'occupied'
-                        ? `${isIbis ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'}`
-                        : selectedTable.status === 'available'
-                        ? 'bg-emerald-100 text-emerald-800'
-                        : 'bg-amber-100 text-amber-900'
-                    }`}
-                  >
-                    {selectedTable.status}
-                  </span>
-                  {selectedTable.isSmoking && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono-custom font-bold bg-cyan-100 text-cyan-800">
-                      <Cigarette size={10} /> Smoking Zone
-                    </span>
-                  )}
-                </div>
+              return (
+                <>
+                  <div className="flex items-start gap-4">
+                    <div
+                      className={`w-14 h-14 rounded-2xl flex flex-col items-center justify-center border font-mono-custom font-extrabold text-lg shadow-sm ${
+                        selectedTable.status === 'occupied'
+                          ? `${isIbis ? 'bg-red-600 border-red-700' : 'bg-blue-600 border-blue-700'} text-white`
+                          : selectedTable.status === 'available'
+                          ? 'bg-emerald-50 text-emerald-800 border-emerald-400'
+                          : 'bg-amber-50 text-amber-900 border-amber-400'
+                      }`}
+                    >
+                      <span className={combinedNum.length > 4 ? 'text-xs' : 'text-sm'}>
+                        {combinedNum}
+                      </span>
+                      <span className="text-[9px] font-medium opacity-80">{effCap} Seats</span>
+                    </div>
 
-                {selectedTable.status === 'occupied' && selectedTable.occupiedByRoom ? (
-                  <div className="flex items-center gap-3 text-xs font-mono-custom text-muted-foreground mt-1">
-                    <span>
-                      Room: <strong className="text-foreground">{selectedTable.occupiedByRoom}</strong>
-                    </span>
-                    <span>•</span>
-                    <span>
-                      Guest: <strong className="text-foreground">{selectedTable.occupiedByGuest || 'In-House'}</strong>
-                    </span>
-                    <span>•</span>
-                    <span>
-                      Seated at: <strong className="text-foreground">{selectedTable.occupiedSince || 'Active'}</strong>
-                    </span>
-                    <span>•</span>
-                    <span>
-                      Pax: <strong className="text-foreground">{selectedTable.occupiedPax || selectedTable.capacity}</strong>
-                    </span>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className="text-lg font-bold font-display text-foreground">
+                          Table {combinedNum} • {selectedTable.zone}
+                        </h4>
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-mono-custom font-bold uppercase ${
+                            selectedTable.status === 'occupied'
+                              ? `${isIbis ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'}`
+                              : selectedTable.status === 'available'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : 'bg-amber-100 text-amber-900'
+                          }`}
+                        >
+                          {selectedTable.status}
+                        </span>
+                        {isMergedGroup && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono-custom font-bold bg-indigo-100 text-indigo-800 border border-indigo-300">
+                            <Layers size={10} /> Merged ({members.map((m) => m.tableNumber).join(' + ')})
+                          </span>
+                        )}
+                        {selectedTable.isSmoking && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono-custom font-bold bg-cyan-100 text-cyan-800">
+                            <Cigarette size={10} /> Smoking Zone
+                          </span>
+                        )}
+                      </div>
+
+                      {selectedTable.status === 'occupied' && selectedTable.occupiedByRoom ? (
+                        <div className="flex items-center gap-3 text-xs font-mono-custom text-muted-foreground mt-1 flex-wrap">
+                          <span>
+                            Room: <strong className="text-foreground">{selectedTable.occupiedByRoom}</strong>
+                          </span>
+                          <span>•</span>
+                          <span>
+                            Guest: <strong className="text-foreground">{selectedTable.occupiedByGuest || 'In-House'}</strong>
+                          </span>
+                          <span>•</span>
+                          <span>
+                            Seated at: <strong className="text-foreground">{selectedTable.occupiedSince || 'Active'}</strong>
+                          </span>
+                          <span>•</span>
+                          <span>
+                            Pax: <strong className="text-foreground">{selectedTable.occupiedPax || effCap}</strong>
+                          </span>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted-foreground font-mono-custom mt-1">
+                          Table is clean and ready to seat guests for {activeMealService}.
+                        </p>
+                      )}
+                    </div>
                   </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground font-mono-custom mt-1">
-                    Table is clean and ready to seat guests for {activeMealService}.
-                  </p>
-                )}
-              </div>
-            </div>
 
-            {/* Quick Actions */}
-            <div className="flex items-center gap-2 shrink-0">
-              {selectedTable.status === 'available' ? (
-                <button
-                  onClick={() => onQuickSeat(selectedTable)}
-                  className="px-5 py-2.5 rounded-xl bg-accent text-white font-mono-custom font-bold text-xs flex items-center gap-2 hover:bg-accent-hover shadow-xs cursor-pointer"
-                >
-                  <Users size={14} />
-                  Seat Guest Here
-                </button>
-              ) : selectedTable.status === 'occupied' ? (
-                <button
-                  onClick={() => onUpdateStatus(selectedTable, 'available')}
-                  className="px-4 py-2 rounded-xl border border-border text-foreground font-mono-custom font-bold text-xs hover:bg-[#F2EBE4] transition-all cursor-pointer"
-                >
-                  Clear & Set Available
-                </button>
-              ) : null}
+                  {/* Quick Actions & Unmerge */}
+                  <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                    {/* Unmerge button for merged groups */}
+                    {isMergedGroup && onUnmergeTable && (
+                      <button
+                        onClick={() => onUnmergeTable(selectedTable)}
+                        disabled={isOccupied}
+                        className="px-3.5 py-2 rounded-xl border border-indigo-300 bg-indigo-50 text-indigo-800 font-mono-custom font-bold text-xs flex items-center gap-1.5 hover:bg-indigo-100 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                        title={isOccupied ? 'Cannot un-merge while table is occupied' : 'Split back into individual standalone tables'}
+                      >
+                        <Split size={13} />
+                        <span>Un-merge</span>
+                      </button>
+                    )}
 
-              {/* Status Quick Changer */}
-              <div className="flex items-center bg-[#F2EBE4]/60 p-1 rounded-xl border border-border">
-                {(['available', 'occupied', 'reserved', 'cleaning'] as const).map((st) => (
-                  <button
-                    key={st}
-                    onClick={() => onUpdateStatus(selectedTable, st)}
-                    className={`px-2.5 py-1 rounded-lg text-[10px] font-mono-custom font-bold capitalize transition-all cursor-pointer ${
-                      selectedTable.status === st
-                        ? 'bg-white text-black shadow-xs border border-black/10'
-                        : 'text-muted-foreground hover:text-black'
-                    }`}
-                  >
-                    {st}
-                  </button>
-                ))}
-              </div>
-            </div>
+                    {selectedTable.status === 'available' ? (
+                      <button
+                        onClick={() => onQuickSeat(selectedTable)}
+                        className="px-5 py-2.5 rounded-xl bg-accent text-white font-mono-custom font-bold text-xs flex items-center gap-2 hover:bg-accent-hover shadow-xs cursor-pointer"
+                      >
+                        <Users size={14} />
+                        Seat Guest Here
+                      </button>
+                    ) : selectedTable.status === 'occupied' ? (
+                      <button
+                        onClick={() => onUpdateStatus(selectedTable, 'available')}
+                        className="px-4 py-2 rounded-xl border border-border text-foreground font-mono-custom font-bold text-xs hover:bg-[#F2EBE4] transition-all cursor-pointer"
+                      >
+                        Clear & Set Available
+                      </button>
+                    ) : null}
+
+                    {/* Status Quick Changer */}
+                    <div className="flex items-center bg-[#F2EBE4]/60 p-1 rounded-xl border border-border">
+                      {(['available', 'occupied', 'reserved', 'cleaning'] as const).map((st) => (
+                        <button
+                          key={st}
+                          onClick={() => onUpdateStatus(selectedTable, st)}
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-mono-custom font-bold capitalize transition-all cursor-pointer ${
+                            selectedTable.status === st
+                              ? 'bg-white text-black shadow-xs border border-black/10'
+                              : 'text-muted-foreground hover:text-black'
+                          }`}
+                        >
+                          {st}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
           </motion.div>
         )}
       </AnimatePresence>
