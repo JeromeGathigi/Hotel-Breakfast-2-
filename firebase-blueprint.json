@@ -1,0 +1,67 @@
+{
+  "entities": {
+    "Guest": {
+      "title": "Guest",
+      "description": "Hotel in-house guest reservation and meal profile details",
+      "type": "object",
+      "properties": {
+        "roomNumber": { "type": "string", "description": "Hotel room identifier" },
+        "guestName": { "type": "string", "description": "Primary reservation guest name" },
+        "arrivalDate": { "type": "string", "description": "Check-in date (YYYY-MM-DD)" },
+        "departureDate": { "type": "string", "description": "Check-out date (YYYY-MM-DD)" },
+        "adults": { "type": "number", "description": "Number of adults registered" },
+        "children": { "type": "number", "description": "Number of children registered" },
+        "mealPlan": { "type": "string", "description": "Opera meal entitlement package" },
+        "vipLevel": { "type": "string", "description": "Accor ALL loyalty / VIP tier" },
+        "companyName": { "type": "string", "description": "Corporate or travel agency name" },
+        "rateCode": { "type": "string", "description": "Opera PMS Rate Code" }
+      },
+      "required": ["roomNumber", "guestName", "adults", "mealPlan"]
+    },
+    "CheckIn": {
+      "title": "CheckIn",
+      "description": "Breakfast dining session check-in record for an in-house room",
+      "type": "object",
+      "properties": {
+        "roomNumber": { "type": "string", "description": "Room number checked in" },
+        "tableNumber": { "type": "string", "description": "Assigned dining table" },
+        "adultsAte": { "type": "number", "description": "Adult covers seated" },
+        "childrenAte": { "type": "number", "description": "Child covers seated" },
+        "timestamp": { "type": "string", "description": "Check-in ISO timestamp" },
+        "mealPlan": { "type": "string", "description": "Entitlement plan consumed" },
+        "hostStaff": { "type": "string", "description": "Host/Server staff name" },
+        "notes": { "type": "string", "description": "Dietary or operational remarks" }
+      },
+      "required": ["roomNumber", "adultsAte", "timestamp"]
+    },
+    "Override": {
+      "title": "Override",
+      "description": "Room package or occupancy override record",
+      "type": "object",
+      "properties": {
+        "roomNumber": { "type": "string", "description": "Room number" },
+        "adults": { "type": "number", "description": "Overridden adult allowance" },
+        "children": { "type": "number", "description": "Overridden child allowance" },
+        "mealPlan": { "type": "string", "description": "Overridden meal plan" },
+        "date": { "type": "string", "description": "Business date of override" },
+        "reason": { "type": "string", "description": "Reason for override" },
+        "updatedBy": { "type": "string", "description": "Authorizing staff or manager" }
+      },
+      "required": ["roomNumber", "date"]
+    }
+  },
+  "firestore": {
+    "/hotels/{hotelId}/guests/{guestId}": {
+      "schema": "Guest",
+      "description": "Active in-house guest manifest roster for the hotel"
+    },
+    "/hotels/{hotelId}/checkins/{date}/rooms/{roomNumber}": {
+      "schema": "CheckIn",
+      "description": "Daily dining room check-in logs partitioned by business date"
+    },
+    "/hotels/{hotelId}/overrides/{roomNumber}": {
+      "schema": "Override",
+      "description": "Staff-authorized meal or cover overrides per room"
+    }
+  }
+}

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import { DiningTable, MealServiceType, FloorFeature, TableLayout } from '../types';
 import { 
   NOVOTEL_PLATE, 
@@ -14,6 +14,13 @@ import {
   validateMerge 
 } from '../lib/tables';
 import { 
+  getOccupiedDurationMinutes, 
+  getTurnoverStage, 
+  getTurnoverStyle, 
+  formatOccupiedDuration,
+  TurnoverStage
+} from '../lib/turnover';
+import { 
   Users, 
   Cigarette, 
   ZoomIn, 
@@ -26,7 +33,10 @@ import {
   Layers,
   Split,
   Link as LinkIcon,
-  AlertCircle
+  AlertCircle,
+  Clock,
+  Timer,
+  AlertTriangle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -39,6 +49,8 @@ interface RestaurantFloorPlan2DProps {
   highlightQuery?: string;
   isAdmin?: boolean;
   activeLayout?: TableLayout | null;
+  showTurnoverLayer?: boolean;
+  onToggleTurnoverLayer?: (enabled: boolean) => void;
   onSelectTable: (table: DiningTable) => void;
   onQuickSeat: (table: DiningTable) => void;
   onUpdateStatus: (table: DiningTable, status: DiningTable['status']) => void;
@@ -56,6 +68,8 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
   highlightQuery = '',
   isAdmin = false,
   activeLayout = null,
+  showTurnoverLayer,
+  onToggleTurnoverLayer,
   onSelectTable,
   onQuickSeat,
   onUpdateStatus,
@@ -66,6 +80,19 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
   const svgRef = useRef<SVGSVGElement>(null);
   const [zoomLevel, setZoomLevel] = useState<number>(1);
   const [hoveredTable, setHoveredTable] = useState<DiningTable | null>(null);
+
+  // Turnover Visualization Layer state (default to true for immediate host assistance)
+  const [internalTurnover, setInternalTurnover] = useState(true);
+  const isTurnoverActive = showTurnoverLayer !== undefined ? showTurnoverLayer : internalTurnover;
+
+  // Live timer tick every 30 seconds to dynamically update elapsed occupancy durations
+  const [currentTime, setCurrentTime] = useState<Date>(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 30000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Edit layout mode state
   const [isEditMode, setIsEditMode] = useState(false);
@@ -83,6 +110,36 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
   const isIbis = hotelId === 'ibis';
   const plate = isIbis ? IBIS_PLATE : NOVOTEL_PLATE;
   const features = isIbis ? IBIS_FLOOR_FEATURES : NOVOTEL_FLOOR_FEATURES;
+
+  // Real-time turnover stage statistics across active tables
+  const turnoverStats = useMemo(() => {
+    let fresh = 0;
+    let dining = 0;
+    let warning = 0;
+    let critical = 0;
+    let total = 0;
+
+    tables.forEach((t) => {
+      if (t.status === 'occupied') {
+        total++;
+        const mins = getOccupiedDurationMinutes(t.occupiedSince, currentTime);
+        const stage = getTurnoverStage(mins);
+        if (stage === 'fresh') fresh++;
+        else if (stage === 'dining') dining++;
+        else if (stage === 'warning') warning++;
+        else if (stage === 'critical') critical++;
+      }
+    });
+
+    return {
+      freshCount: fresh,
+      diningCount: dining,
+      warningCount: warning,
+      criticalCount: critical,
+      overdueCount: warning + critical,
+      totalOccupied: total,
+    };
+  }, [tables, currentTime]);
 
   // Keep stagedTables synced when not actively editing
   React.useEffect(() => {
@@ -661,6 +718,22 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
       (e) => (e.id === table.id && e.mergedTables && e.mergedTables.length > 0) || (e.id === table.id && e.mergedInto)
     );
 
+    // Turnover duration & stage calculation
+    const isOccupied = table.status === 'occupied';
+    const durationMinutes = isOccupied ? getOccupiedDurationMinutes(table.occupiedSince, currentTime) : null;
+    const turnoverStage = getTurnoverStage(durationMinutes);
+    const turnoverStyle = getTurnoverStyle(turnoverStage, isIbis);
+
+    // Dynamic turnover border color, stroke width, and fill opacity
+    const isTurnoverHighlighted = isTurnoverActive && isOccupied && turnoverStage !== 'none';
+    const finalStroke = isTurnoverHighlighted ? turnoverStyle.borderColor : styles.stroke;
+    const finalStrokeWidth = isTurnoverHighlighted
+      ? turnoverStyle.strokeWidth
+      : isPrimary || isChild
+      ? 2
+      : 1.5;
+    const finalFillOpacity = isTurnoverHighlighted ? turnoverStyle.fillOpacity : 1.0;
+
     return (
       <g
         key={table.id}
@@ -698,6 +771,20 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
           pointerEvents="all"
           className="select-none"
         />
+
+        {/* Turnover Alert Pulsing Halo */}
+        {isTurnoverHighlighted && turnoverStyle.pulseAnimation && !isEditMode && (
+          <circle
+            cx={tx}
+            cy={ty}
+            r={radius + 6}
+            fill={turnoverStyle.glowColor}
+            fillOpacity={0.22}
+            stroke={turnoverStyle.borderColor}
+            strokeWidth={1.5}
+            className="animate-pulse"
+          />
+        )}
 
         {/* Dragging active halo */}
         {isDragging && (
@@ -789,8 +876,9 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
               height={radius * 2}
               rx={3}
               fill={styles.fill}
-              stroke={styles.stroke}
-              strokeWidth={isPrimary || isChild ? 2 : 1.5}
+              fillOpacity={finalFillOpacity}
+              stroke={finalStroke}
+              strokeWidth={finalStrokeWidth}
               strokeDasharray={!isLayoutMerged && (isPrimary || isChild) ? '3 1.5' : undefined}
             />
           </g>
@@ -800,8 +888,9 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
             cy={ty}
             r={radius}
             fill={styles.fill}
-            stroke={styles.stroke}
-            strokeWidth={isPrimary || isChild ? 2 : 1.5}
+            fillOpacity={finalFillOpacity}
+            stroke={finalStroke}
+            strokeWidth={finalStrokeWidth}
             strokeDasharray={!isLayoutMerged && (isPrimary || isChild) ? '3 1.5' : undefined}
           />
         ) : (
@@ -812,10 +901,39 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
             height={radius * 2}
             rx={3}
             fill={styles.fill}
-            stroke={styles.stroke}
-            strokeWidth={isPrimary || isChild ? 2 : 1.5}
+            fillOpacity={finalFillOpacity}
+            stroke={finalStroke}
+            strokeWidth={finalStrokeWidth}
             strokeDasharray={!isLayoutMerged && (isPrimary || isChild) ? '3 1.5' : undefined}
           />
+        )}
+
+        {/* Turnover Duration Tag Pill when turnover layer is active */}
+        {isTurnoverHighlighted && !isChild && durationMinutes !== null && !isEditMode && (
+          <g transform={`translate(${tx}, ${ty - radius - 5.5})`} className="pointer-events-none select-none">
+            <rect
+              x={-14}
+              y={-4.5}
+              width={28}
+              height={9}
+              rx={2.5}
+              fill={turnoverStyle.borderColor}
+              stroke="#FFFFFF"
+              strokeWidth={0.75}
+            />
+            <text
+              x={0}
+              y={0.5}
+              textAnchor="middle"
+              dominantBaseline="central"
+              fill="#FFFFFF"
+              fontSize={5.5}
+              fontWeight="900"
+              className="font-mono-custom"
+            >
+              {formatOccupiedDuration(durationMinutes)}
+            </text>
+          </g>
         )}
 
         {/* Primary or Standalone Table Content */}
@@ -973,7 +1091,37 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
           </div>
 
           {/* Action & Zoom Controls */}
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            {/* Turnover Duration Layer Toggle */}
+            {!isEditMode && !isMergeMode && (
+              <button
+                onClick={() =>
+                  onToggleTurnoverLayer
+                    ? onToggleTurnoverLayer(!isTurnoverActive)
+                    : setInternalTurnover(!internalTurnover)
+                }
+                className={`px-3 py-1.5 rounded-xl font-mono-custom font-semibold text-xs flex items-center gap-1.5 border transition-all cursor-pointer ${
+                  isTurnoverActive
+                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-xs'
+                    : 'bg-white/10 hover:bg-white/20 text-white/80 border-white/15'
+                }`}
+                title="Toggle turnover duration heatmap layer on occupied tables"
+              >
+                <Clock
+                  size={13}
+                  className={isTurnoverActive ? 'text-amber-400 animate-pulse' : 'text-white/70'}
+                />
+                <span>Turnover Times</span>
+                {turnoverStats.totalOccupied > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-amber-400/20 text-amber-200 border border-amber-400/30">
+                    {turnoverStats.overdueCount > 0
+                      ? `${turnoverStats.overdueCount} due`
+                      : `${turnoverStats.totalOccupied} seated`}
+                  </span>
+                )}
+              </button>
+            )}
+
             {/* Merge Mode Toggle (When not editing) */}
             {!isEditMode && onMergeTables && (
               <>
@@ -1212,59 +1360,94 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
         </div>
 
         {/* Bottom Real-Time Legend & Quick Status Summary Bar */}
-        <div className="bg-white px-6 py-4 border-t border-border flex flex-wrap items-center justify-between gap-4">
-          {/* Status Color Legend */}
-          <div className="flex items-center gap-4 flex-wrap text-xs font-mono-custom">
-            <span className="text-[11px] font-bold text-stone-700 label-mono">Table Status:</span>
-            <div className="flex items-center gap-1.5">
-              <span className="w-3.5 h-3.5 rounded-md bg-emerald-100 border border-emerald-500" />
-              <span className="text-foreground">Available</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span
-                className={`w-3.5 h-3.5 rounded-md ${
-                  isIbis ? 'bg-red-600' : 'bg-blue-600'
-                } border ${isIbis ? 'border-red-700' : 'border-blue-700'}`}
-              />
-              <span className="text-foreground font-semibold">Occupied</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="w-3.5 h-3.5 rounded-md bg-amber-100 border border-amber-500" />
-              <span className="text-foreground">Reserved</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="w-3.5 h-3.5 rounded-md bg-slate-200 border border-slate-400" />
-              <span className="text-foreground">Needs Cleaning</span>
-            </div>
-            {isIbis && (
-              <div className="flex items-center gap-1.5 border-l border-border pl-3 text-cyan-800">
-                <Cigarette size={13} />
-                <span>Smoking Allowed Zone</span>
+        <div className="bg-white px-6 py-4 border-t border-border flex flex-col gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            {/* Status Color Legend */}
+            <div className="flex items-center gap-4 flex-wrap text-xs font-mono-custom">
+              <span className="text-[11px] font-bold text-stone-700 label-mono">Table Status:</span>
+              <div className="flex items-center gap-1.5">
+                <span className="w-3.5 h-3.5 rounded-md bg-emerald-100 border border-emerald-500" />
+                <span className="text-foreground">Available</span>
               </div>
-            )}
-            <div className="flex items-center gap-1.5 border-l border-border pl-3 text-indigo-700">
-              <Layers size={13} />
-              <span>Merged Group</span>
+              <div className="flex items-center gap-1.5">
+                <span
+                  className={`w-3.5 h-3.5 rounded-md ${
+                    isIbis ? 'bg-red-600' : 'bg-blue-600'
+                  } border ${isIbis ? 'border-red-700' : 'border-blue-700'}`}
+                />
+                <span className="text-foreground font-semibold">Occupied</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-3.5 h-3.5 rounded-md bg-amber-100 border border-amber-500" />
+                <span className="text-foreground">Reserved</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-3.5 h-3.5 rounded-md bg-slate-200 border border-slate-400" />
+                <span className="text-foreground">Needs Cleaning</span>
+              </div>
+              {isIbis && (
+                <div className="flex items-center gap-1.5 border-l border-border pl-3 text-cyan-800">
+                  <Cigarette size={13} />
+                  <span>Smoking Allowed Zone</span>
+                </div>
+              )}
+              <div className="flex items-center gap-1.5 border-l border-border pl-3 text-indigo-700">
+                <Layers size={13} />
+                <span>Merged Group</span>
+              </div>
+            </div>
+
+            {/* Table Count Summary */}
+            <div className="flex items-center gap-3 text-xs font-mono-custom">
+              <span className="text-muted-foreground">
+                Showing <strong className="text-foreground">{seatableTables(visibleTables).length}</strong> seatable tables
+              </span>
+              <span className="text-muted-foreground">•</span>
+              <span className="text-muted-foreground">
+                Total Capacity:{' '}
+                <strong className="text-foreground">
+                  {seatableTables(visibleTables).reduce(
+                    (a, t) => a + effectiveCapacity(t, visibleTables),
+                    0
+                  )}{' '}
+                  Seats
+                </strong>
+              </span>
             </div>
           </div>
 
-          {/* Table Count Summary */}
-          <div className="flex items-center gap-3 text-xs font-mono-custom">
-            <span className="text-muted-foreground">
-              Showing <strong className="text-foreground">{seatableTables(visibleTables).length}</strong> seatable tables
-            </span>
-            <span className="text-muted-foreground">•</span>
-            <span className="text-muted-foreground">
-              Total Capacity:{' '}
-              <strong className="text-foreground">
-                {seatableTables(visibleTables).reduce(
-                  (a, t) => a + effectiveCapacity(t, visibleTables),
-                  0
-                )}{' '}
-                Seats
-              </strong>
-            </span>
-          </div>
+          {/* Turnover Heatmap Legend (when active) */}
+          {isTurnoverActive && (
+            <div className="w-full flex items-center gap-3.5 flex-wrap text-xs font-mono-custom pt-2.5 border-t border-border/60">
+              <span className="text-[11px] font-bold text-amber-900 label-mono flex items-center gap-1">
+                <Clock size={12} className="text-amber-600" /> Turnover Heatmap:
+              </span>
+              <div className="flex items-center gap-1.5">
+                <span className="w-3.5 h-3.5 rounded-md bg-emerald-500/20 border-2 border-emerald-500" />
+                <span className="text-foreground text-[11px]">
+                  &lt; 20m Fresh ({turnoverStats.freshCount})
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-3.5 h-3.5 rounded-md bg-amber-500/20 border-2 border-amber-500" />
+                <span className="text-foreground text-[11px]">
+                  20–45m Dining ({turnoverStats.diningCount})
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-3.5 h-3.5 rounded-md bg-red-500/20 border-2 border-red-500" />
+                <span className="text-foreground font-semibold text-[11px]">
+                  45–60m Ready ({turnoverStats.warningCount})
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-3.5 h-3.5 rounded-md bg-red-600/30 border-2 border-red-600 animate-pulse" />
+                <span className="text-red-700 font-bold text-[11px]">
+                  &gt; 60m Overdue ({turnoverStats.criticalCount})
+                </span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1352,6 +1535,40 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
                         <p className="text-xs text-muted-foreground font-mono-custom mt-1">
                           Table is clean and ready to seat guests for {activeMealService}.
                         </p>
+                      )}
+
+                      {/* Selected Table Turnover Stage & Time Elapsed Detail */}
+                      {selectedTable.status === 'occupied' && (
+                        (() => {
+                          const durMins = getOccupiedDurationMinutes(selectedTable.occupiedSince, currentTime);
+                          const stage = getTurnoverStage(durMins);
+                          const style = getTurnoverStyle(stage, isIbis);
+                          return (
+                            <div className="flex items-center gap-2 mt-2 pt-2 border-t border-border/60 flex-wrap">
+                              <span
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-mono-custom font-bold border shadow-xs"
+                                style={{
+                                  backgroundColor: style.badgeBg,
+                                  color: style.badgeText,
+                                  borderColor: style.borderColor,
+                                }}
+                              >
+                                <Clock size={12} />
+                                <span>
+                                  Turnover: {formatOccupiedDuration(durMins)} ({style.label})
+                                </span>
+                              </span>
+                              {style.isAlert && (
+                                <span className="text-xs font-mono-custom text-red-600 font-bold flex items-center gap-1">
+                                  <AlertCircle size={12} />
+                                  {stage === 'critical'
+                                    ? 'Table overdue (> 60m) — check if dessert or bill is settled'
+                                    : 'Approaching turnover time (45–60m)'}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })()
                       )}
                     </div>
                   </div>

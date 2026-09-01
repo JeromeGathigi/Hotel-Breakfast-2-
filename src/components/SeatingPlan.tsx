@@ -17,6 +17,12 @@ import { DEFAULT_NOVOTEL_TABLES, DEFAULT_IBIS_TABLES } from '../constants';
 import { TableCardSkeleton } from './Skeleton';
 import { RestaurantFloorPlan2D } from './RestaurantFloorPlan2D';
 import { 
+  getOccupiedDurationMinutes, 
+  getTurnoverStage, 
+  getTurnoverStyle, 
+  formatOccupiedDuration 
+} from '../lib/turnover';
+import { 
   Users, 
   Plus, 
   Edit2, 
@@ -36,7 +42,8 @@ import {
   AlertTriangle, 
   Save, 
   BookmarkCheck,
-  MoreVertical
+  MoreVertical,
+  Timer
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -60,6 +67,34 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
   const [inHouseGuests, setInHouseGuests] = useState<Guest[]>([]);
   const [assignModalOpen, setAssignModalOpen] = useState(false);
   const [assignPax, setAssignPax] = useState<number>(2);
+
+  // Turnover Visualization Layer toggle
+  const [showTurnoverLayer, setShowTurnoverLayer] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('opera_turnover_layer_enabled');
+      return saved !== null ? saved === 'true' : true;
+    } catch {
+      return true;
+    }
+  });
+
+  // Live timer tick every 30 seconds
+  const [currentTime, setCurrentTime] = useState<Date>(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 30000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const handleToggleTurnover = (enabled: boolean) => {
+    setShowTurnoverLayer(enabled);
+    try {
+      localStorage.setItem('opera_turnover_layer_enabled', String(enabled));
+    } catch {
+      // ignore
+    }
+  };
 
   // Saved named layouts & reset modals state
   const [isLayoutDropdownOpen, setIsLayoutDropdownOpen] = useState(false);
@@ -683,6 +718,20 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
               </button>
             </div>
 
+            {/* Turnover Heatmap Toggle */}
+            <button
+              onClick={() => handleToggleTurnover(!showTurnoverLayer)}
+              className={`px-3 py-2 rounded-xl text-xs font-mono-custom font-bold flex items-center gap-1.5 border transition-all cursor-pointer shadow-xs ${
+                showTurnoverLayer
+                  ? 'bg-amber-50 text-amber-900 border-amber-300 ring-1 ring-amber-400/30'
+                  : 'bg-white text-muted-foreground border-border hover:bg-[#F2EBE4]/40 hover:text-foreground'
+              }`}
+              title="Toggle table turnover duration highlights"
+            >
+              <Clock size={14} className={showTurnoverLayer ? 'text-amber-600' : ''} />
+              <span>Turnover Heatmap</span>
+            </button>
+
             {/* Quick Search */}
             <div className="relative">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -863,6 +912,9 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
           selectedTable={selectedTable}
           highlightQuery={searchFilter}
           isAdmin={isAdmin}
+          activeLayout={activeLayout}
+          showTurnoverLayer={showTurnoverLayer}
+          onToggleTurnoverLayer={handleToggleTurnover}
           onSelectTable={(table) => setSelectedTable(table)}
           onQuickSeat={(table) => handleQuickSeat(table)}
           onUpdateStatus={(table, status) => handleUpdateStatus(table, status)}
@@ -882,14 +934,29 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
             const isReserved = table.status === 'reserved';
             const isCleaning = table.status === 'cleaning';
 
+            const durMins = isOccupied ? getOccupiedDurationMinutes(table.occupiedSince, currentTime) : null;
+            const turnoverStage = getTurnoverStage(durMins);
+            const turnoverStyle = getTurnoverStyle(turnoverStage, hotelId === 'ibis');
+            const showCardTurnover = showTurnoverLayer && isOccupied && turnoverStage !== 'none';
+
             return (
               <motion.div
                 key={table.id}
                 layout
                 onClick={() => setSelectedTable(table)}
+                style={
+                  showCardTurnover
+                    ? {
+                        borderColor: turnoverStyle.borderColor,
+                        backgroundColor: turnoverStyle.badgeBg,
+                      }
+                    : undefined
+                }
                 className={`relative rounded-2xl border p-4 cursor-pointer transition-all duration-200 hover:border-accent ${
                   isOccupied
-                    ? 'bg-white border-accent/40 shadow-sm ring-1 ring-accent/10'
+                    ? showCardTurnover
+                      ? 'shadow-sm ring-1 ring-black/5'
+                      : 'bg-white border-accent/40 shadow-sm ring-1 ring-accent/10'
                     : isReserved
                     ? 'bg-amber-50/50 border-amber-300 shadow-sm'
                     : isCleaning
@@ -908,19 +975,36 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
                     <p className="label-mono mt-1">{table.zone}</p>
                   </div>
 
-                  <span
-                    className={`inline-flex items-center px-2 py-0.5 rounded-md text-[9px] font-mono-custom font-semibold uppercase ${
-                      isOccupied
-                        ? 'bg-accent text-white'
-                        : isAvailable
-                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                        : isReserved
-                        ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                        : 'bg-slate-200 text-slate-700 border border-slate-300'
-                    }`}
-                  >
-                    {table.status}
-                  </span>
+                  <div className="flex flex-col items-end gap-1">
+                    <span
+                      className={`inline-flex items-center px-2 py-0.5 rounded-md text-[9px] font-mono-custom font-semibold uppercase ${
+                        isOccupied
+                          ? 'bg-accent text-white'
+                          : isAvailable
+                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                          : isReserved
+                          ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                          : 'bg-slate-200 text-slate-700 border border-slate-300'
+                      }`}
+                    >
+                      {table.status}
+                    </span>
+
+                    {/* Live Turnover Pill */}
+                    {showCardTurnover && durMins !== null && (
+                      <span
+                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-mono-custom font-bold border"
+                        style={{
+                          backgroundColor: turnoverStyle.borderColor,
+                          color: '#FFFFFF',
+                          borderColor: turnoverStyle.borderColor,
+                        }}
+                      >
+                        <Clock size={9} />
+                        <span>{formatOccupiedDuration(durMins)}</span>
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {/* Occupancy Info */}
@@ -933,7 +1017,17 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
                       </span>
                     </div>
                     <p className="text-xs font-bold font-sans text-foreground truncate">{table.occupiedByGuest || 'Seated Guest'}</p>
-                    <p className="text-[10px] font-mono-custom text-muted-foreground">{table.occupiedPax || table.capacity} Pax seated</p>
+                    <div className="flex items-center justify-between">
+                      <p className="text-[10px] font-mono-custom text-muted-foreground">{table.occupiedPax || table.capacity} Pax seated</p>
+                      {showCardTurnover && (
+                        <span
+                          className="text-[10px] font-mono-custom font-bold"
+                          style={{ color: turnoverStyle.borderColor }}
+                        >
+                          {turnoverStyle.label}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 ) : (
                   <div className="mt-3.5 pt-2.5 border-t border-border/60 flex items-center justify-between text-[11px] font-mono-custom text-muted-foreground">
@@ -1037,23 +1131,64 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
               </div>
 
               {/* Occupied Details or Seat Guest Button */}
-              {selectedTable.status === 'occupied' && selectedTable.occupiedByRoom ? (
-                <div className="p-4 rounded-xl border border-border bg-[#F2EBE4]/40 space-y-2">
-                  <p className="label-mono text-black font-bold">Currently Seated</p>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-bold font-mono-custom text-foreground">RM {selectedTable.occupiedByRoom}</span>
-                    <span className="text-xs font-mono-custom text-muted-foreground">{selectedTable.occupiedPax} Pax</span>
-                  </div>
-                  <p className="text-xs font-bold font-sans text-foreground">{selectedTable.occupiedByGuest}</p>
-                  <div className="pt-2 flex justify-end">
-                    <button
-                      onClick={() => handleUpdateStatus(selectedTable, 'available')}
-                      className="px-3 py-1.5 rounded-lg border border-black/20 text-xs font-mono-custom font-bold text-black hover:bg-white transition-all shadow-xs cursor-pointer"
-                    >
-                      Clear & Free Table
-                    </button>
-                  </div>
-                </div>
+              {selectedTable.status === 'occupied' ? (
+                (() => {
+                  const durMins = getOccupiedDurationMinutes(selectedTable.occupiedSince, currentTime);
+                  const stage = getTurnoverStage(durMins);
+                  const style = getTurnoverStyle(stage, hotelId === 'ibis');
+
+                  return (
+                    <div className="p-4 rounded-xl border border-border bg-[#F2EBE4]/40 space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <p className="label-mono text-black font-bold">Currently Seated</p>
+                        {durMins !== null && (
+                          <span
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono-custom font-bold border"
+                            style={{
+                              backgroundColor: style.badgeBg,
+                              color: style.badgeText,
+                              borderColor: style.borderColor,
+                            }}
+                          >
+                            <Clock size={10} />
+                            <span>{formatOccupiedDuration(durMins)} ({style.label})</span>
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-bold font-mono-custom text-foreground">
+                          {selectedTable.occupiedByRoom ? `RM ${selectedTable.occupiedByRoom}` : 'In-House Guest'}
+                        </span>
+                        <span className="text-xs font-mono-custom text-muted-foreground">{selectedTable.occupiedPax || selectedTable.capacity} Pax</span>
+                      </div>
+
+                      {selectedTable.occupiedByGuest && (
+                        <p className="text-xs font-bold font-sans text-foreground">{selectedTable.occupiedByGuest}</p>
+                      )}
+
+                      {style.isAlert && (
+                        <div className="text-[11px] font-mono-custom text-red-600 font-bold flex items-center gap-1.5 pt-1">
+                          <AlertTriangle size={13} className="shrink-0" />
+                          <span>
+                            {stage === 'critical'
+                              ? 'Turnover overdue (> 60m) — table should be cleared soon'
+                              : 'Approaching target dining duration (45–60m)'}
+                          </span>
+                        </div>
+                      )}
+
+                      <div className="pt-2 flex justify-end">
+                        <button
+                          onClick={() => handleUpdateStatus(selectedTable, 'available')}
+                          className="px-3 py-1.5 rounded-lg border border-black/20 text-xs font-mono-custom font-bold text-black hover:bg-white transition-all shadow-xs cursor-pointer"
+                        >
+                          Clear & Free Table
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()
               ) : (
                 <button
                   onClick={() => {

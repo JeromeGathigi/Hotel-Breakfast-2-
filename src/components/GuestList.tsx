@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   db, 
   collection, 
-  onSnapshot 
+  onSnapshot,
+  getDocs 
 } from '../firebase';
 import { Guest, CheckIn } from '../types';
 import { VIP_LEVELS } from '../constants';
@@ -15,13 +16,18 @@ import {
   Download, 
   CheckCircle, 
   Clock, 
-  Info 
+  Info,
+  RefreshCw,
+  Radio,
+  Check
 } from 'lucide-react';
-import { AnimatePresence } from 'motion/react';
+import { AnimatePresence, motion } from 'motion/react';
 
 interface GuestListProps {
   hotelId: string;
 }
+
+const REFRESH_INTERVAL_SECONDS = 300; // 5 minutes
 
 export const GuestList: React.FC<GuestListProps> = ({ hotelId }) => {
   const [guests, setGuests] = useState<Guest[]>([]);
@@ -31,22 +37,109 @@ export const GuestList: React.FC<GuestListProps> = ({ hotelId }) => {
   const [statusFilter, setStatusFilter] = useState<'all' | 'attended' | 'pending' | 'vip'>('all');
   const [selectedGuestForAudit, setSelectedGuestForAudit] = useState<Guest | null>(null);
 
+  // Auto-refresh state (5 minutes interval)
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState<boolean>(() => {
+    try {
+      const stored = localStorage.getItem('opera_manifest_auto_refresh');
+      return stored !== null ? stored === 'true' : true;
+    } catch {
+      return true;
+    }
+  });
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<Date>(new Date());
+  const [countdownSeconds, setCountdownSeconds] = useState<number>(REFRESH_INTERVAL_SECONDS);
+  const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
+  const feedbackTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Save auto-refresh toggle preference
+  const toggleAutoRefresh = () => {
+    const nextState = !autoRefreshEnabled;
+    setAutoRefreshEnabled(nextState);
+    try {
+      localStorage.setItem('opera_manifest_auto_refresh', String(nextState));
+    } catch {}
+    if (nextState) {
+      setCountdownSeconds(REFRESH_INTERVAL_SECONDS);
+    }
+  };
+
+  // Reusable fetch function from Firestore
+  const fetchManifestData = useCallback(async (isManual = false) => {
+    setIsRefreshing(true);
+    const today = businessDate();
+
+    try {
+      const guestsRef = collection(db, 'hotels', hotelId, 'guests');
+      const checkinsRef = collection(db, 'hotels', hotelId, 'checkins', today, 'rooms');
+
+      const [guestsSnap, checkinsSnap] = await Promise.all([
+        getDocs(guestsRef),
+        getDocs(checkinsRef)
+      ]);
+
+      if (guestsSnap && guestsSnap.docs) {
+        const list = guestsSnap.docs.map((d: any) => d.data() as Guest);
+        list.sort((a: Guest, b: Guest) => a.roomNumber.localeCompare(b.roomNumber, undefined, { numeric: true }));
+        setGuests(list);
+      }
+
+      if (checkinsSnap && checkinsSnap.docs) {
+        const map: Record<string, CheckIn> = {};
+        checkinsSnap.docs.forEach((d: any) => {
+          map[d.id] = d.data() as CheckIn;
+        });
+        setCheckIns(map);
+      }
+
+      const now = new Date();
+      setLastRefreshedAt(now);
+      setCountdownSeconds(REFRESH_INTERVAL_SECONDS);
+
+      const timeStr = now.toLocaleTimeString('en-US', {
+        timeZone: 'Asia/Bangkok',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+      });
+
+      if (feedbackTimeoutRef.current) {
+        clearTimeout(feedbackTimeoutRef.current);
+      }
+      setSyncFeedback(`Manifest synced with Firestore at ${timeStr} (${guests.length} rooms)`);
+      feedbackTimeoutRef.current = setTimeout(() => {
+        setSyncFeedback(null);
+      }, 4000);
+    } catch (err) {
+      console.warn('Error fetching manifest data:', err);
+    } finally {
+      // Smooth visual feedback
+      setTimeout(() => {
+        setIsRefreshing(false);
+        setLoading(false);
+      }, 350);
+    }
+  }, [hotelId, guests.length]);
+
+  // Initial real-time Firestore listeners
   useEffect(() => {
     setLoading(true);
     const today = businessDate();
 
     const guestsRef = collection(db, 'hotels', hotelId, 'guests');
     const unsubGuests = onSnapshot(guestsRef, (snap) => {
-      const list = snap.docs.map((d) => d.data() as Guest);
-      list.sort((a, b) => a.roomNumber.localeCompare(b.roomNumber, undefined, { numeric: true }));
+      const list = snap.docs.map((d: any) => d.data() as Guest);
+      list.sort((a: Guest, b: Guest) => a.roomNumber.localeCompare(b.roomNumber, undefined, { numeric: true }));
       setGuests(list);
       setLoading(false);
+      setLastRefreshedAt(new Date());
     });
 
     const checkinsRef = collection(db, 'hotels', hotelId, 'checkins', today, 'rooms');
     const unsubCheckins = onSnapshot(checkinsRef, (snap) => {
       const map: Record<string, CheckIn> = {};
-      snap.docs.forEach((d) => {
+      snap.docs.forEach((d: any) => {
         map[d.id] = d.data() as CheckIn;
       });
       setCheckIns(map);
@@ -55,8 +148,35 @@ export const GuestList: React.FC<GuestListProps> = ({ hotelId }) => {
     return () => {
       unsubGuests();
       unsubCheckins();
+      if (feedbackTimeoutRef.current) {
+        clearTimeout(feedbackTimeoutRef.current);
+      }
     };
   }, [hotelId]);
+
+  // 5-minute Auto-refresh countdown & trigger loop
+  useEffect(() => {
+    if (!autoRefreshEnabled) return;
+
+    const interval = setInterval(() => {
+      setCountdownSeconds((prev) => {
+        if (prev <= 1) {
+          fetchManifestData(false);
+          return REFRESH_INTERVAL_SECONDS;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [autoRefreshEnabled, fetchManifestData]);
+
+  // Format countdown mm:ss
+  const formatCountdown = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
 
   const filteredGuests = guests.filter((g) => {
     const isChecked = Boolean(checkIns[g.roomNumber]);
@@ -116,9 +236,9 @@ export const GuestList: React.FC<GuestListProps> = ({ hotelId }) => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* Header with Auto-Refresh Controls */}
       <div className="bg-white rounded-2xl p-6 border border-border shadow-luxury">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
               <span className="label-mono text-accent">Opera In-House Roster</span>
@@ -127,18 +247,89 @@ export const GuestList: React.FC<GuestListProps> = ({ hotelId }) => {
             </div>
             <h2 className="text-2xl font-bold font-display text-foreground mt-1 tracking-tight">In-House Guest Manifest</h2>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Complete guest roster, room status, meal package allocations, and audit details.
+              Complete guest roster, room status, meal package allocations, and live host stand synchronization.
             </p>
           </div>
 
-          <button
-            onClick={exportCsv}
-            className="px-4 py-2 rounded-xl border border-border bg-white hover:bg-[#F2EBE4]/50 text-foreground font-mono-custom font-medium text-xs flex items-center gap-2 shadow-xs transition-all"
-          >
-            <Download size={13} className="text-accent" />
-            Export CSV
-          </button>
+          {/* Sync & Export Action Controls */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* Auto-Refresh Toggle Switch */}
+            <div 
+              id="manifest-auto-refresh-control"
+              className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl border border-border bg-[#F2EBE4]/40 shadow-xs"
+            >
+              <button
+                type="button"
+                role="switch"
+                aria-checked={autoRefreshEnabled}
+                onClick={toggleAutoRefresh}
+                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+                  autoRefreshEnabled ? 'bg-emerald-600' : 'bg-stone-300'
+                }`}
+                title={autoRefreshEnabled ? 'Auto-refresh enabled (every 5 minutes)' : 'Auto-refresh disabled'}
+              >
+                <span
+                  aria-hidden="true"
+                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                    autoRefreshEnabled ? 'translate-x-4' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+
+              <div className="flex flex-col">
+                <span className="text-[11px] font-mono-custom font-bold text-foreground flex items-center gap-1.5">
+                  <span className={`inline-block w-2 h-2 rounded-full ${
+                    autoRefreshEnabled ? 'bg-emerald-500 animate-pulse' : 'bg-stone-400'
+                  }`} />
+                  Auto-Refresh (5m)
+                </span>
+                <span className="text-[9px] font-mono-custom text-muted-foreground">
+                  {autoRefreshEnabled ? `Next sync: ${formatCountdown(countdownSeconds)}` : 'Sync paused'}
+                </span>
+              </div>
+            </div>
+
+            {/* Manual Refresh Button */}
+            <button
+              id="manifest-manual-refresh-btn"
+              onClick={() => fetchManifestData(true)}
+              disabled={isRefreshing}
+              className="px-3 py-2 rounded-xl border border-border bg-white hover:bg-[#F2EBE4]/50 text-foreground font-mono-custom font-medium text-xs flex items-center gap-1.5 shadow-xs transition-all disabled:opacity-50 cursor-pointer"
+              title="Force immediate update from Firestore"
+            >
+              <RefreshCw 
+                size={13} 
+                className={`text-accent ${isRefreshing ? 'animate-spin' : ''}`} 
+              />
+              <span>{isRefreshing ? 'Syncing...' : 'Refresh'}</span>
+            </button>
+
+            {/* Export CSV Button */}
+            <button
+              onClick={exportCsv}
+              className="px-3.5 py-2 rounded-xl border border-border bg-white hover:bg-[#F2EBE4]/50 text-foreground font-mono-custom font-medium text-xs flex items-center gap-2 shadow-xs transition-all cursor-pointer"
+              title="Export filtered manifest to CSV"
+            >
+              <Download size={13} className="text-accent" />
+              Export CSV
+            </button>
+          </div>
         </div>
+
+        {/* Live Sync Status Banner */}
+        <AnimatePresence>
+          {syncFeedback && (
+            <motion.div
+              initial={{ opacity: 0, height: 0, marginTop: 0 }}
+              animate={{ opacity: 1, height: 'auto', marginTop: 12 }}
+              exit={{ opacity: 0, height: 0, marginTop: 0 }}
+              className="px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-mono-custom flex items-center gap-1.5 shadow-xs overflow-hidden"
+            >
+              <Check size={12} className="text-emerald-600 shrink-0" />
+              <span>{syncFeedback}</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Filter Tabs & Search */}
