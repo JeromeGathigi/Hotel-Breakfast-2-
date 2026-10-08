@@ -3,7 +3,7 @@ import { Plus, Search, ReceiptText } from 'lucide-react';
 import { Banner, btn } from '../components/ui';
 import { formatBusinessDateDisplay } from '../lib/businessDate';
 import { timeInBangkok } from '../lib/dates';
-import { canManage, type Role } from '../lib/access';
+import { canManage, canMarkSoldOut, type Role } from '../lib/access';
 import { channelLabel, formatThb, orderTotals, type Order, type OrderStatus } from './orderModel';
 import type { OrdersStore } from './store';
 import { NewOrderDialog } from './NewOrderDialog';
@@ -165,7 +165,7 @@ export const OrdersView: React.FC<{
           }}
         />
       )}
-      {selected && <OrderPanel order={selected} store={store} manager={manager} onClose={() => setOpenId(null)} />}
+      {selected && <OrderPanel order={selected} store={store} manager={manager} canMarkSoldOut={canMarkSoldOut(role)} onClose={() => setOpenId(null)} />}
     </div>
   );
 };

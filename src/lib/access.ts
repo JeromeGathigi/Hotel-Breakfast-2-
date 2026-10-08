@@ -8,12 +8,18 @@
  * saw the admin screens over a database that refused its reads and writes, and a role granted with
  * the script did nothing at all.
  *
- *   admin    import Opera files, edit the floor plan, data maintenance, everything below
- *   manager  manifest, forecast, analytics, sales, settings, audit log; on a Food Exchange bill:
- *            discounts, complimentary payments, removing a payment, voiding a dish already
- *            served, reopening a closed bill, marking dishes sold out; everything below
- *   staff    the door (check-in, corrections, seating) and Food Exchange orders and kitchen
+ *   admin    data maintenance, everything below
+ *   manager  Opera imports, editing the floor plan, manifest, forecast, analytics, sales,
+ *            settings, audit log; on a Food Exchange bill: discounts, complimentary payments,
+ *            removing a payment, voiding a dish already served, reopening a closed bill;
+ *            everything below
+ *   staff    the door (check-in, corrections, seating) and Food Exchange orders, kitchen and
+ *            menu, including marking a dish sold out
  *   none     signed in but not authorised - sees an explanation, nothing else
+ *
+ * On 8 Oct 2026 the owner moved the Opera import and the floor plan from administrators to
+ * managers - the morning import is a front-office or duty-manager task - and sold-out dishes from
+ * managers to everyone at the door, since the kitchen and the hosts find out first.
  *
  * ROLE_DUTIES below says the same in words for Settings > Access, and src/navigation.ts decides
  * the screens from these functions - nothing else in the app compares role strings.
@@ -54,9 +60,12 @@ export function resolveRole({ email, emailVerified, claims }: AccessInput): Role
 
 export const canUseDoor = (r: Role) => r !== 'none';
 export const canManage = (r: Role) => r === 'admin' || r === 'manager';
-export const canImport = (r: Role) => r === 'admin';
+/** Opera imports, which replace the in-house list. */
+export const canImport = (r: Role) => canManage(r);
 /** Tables and saved layouts. Seating, clearing and merging are door work (canUseDoor). */
-export const canEditFloorPlan = (r: Role) => r === 'admin';
+export const canEditFloorPlan = (r: Role) => canManage(r);
+/** Marking a Food Exchange dish sold out, or available again. */
+export const canMarkSoldOut = (r: Role) => canUseDoor(r);
 /** Settings > Data maintenance: permanently removes documents. */
 export const canMaintainData = (r: Role) => r === 'admin';
 
@@ -70,13 +79,15 @@ export const ROLE_LABEL: Record<Role, string> = {
 /** What each role adds to the one below it, for Settings > Access. */
 export const ROLE_DUTIES: Record<Exclude<Role, 'none'>, string[]> = {
   staff: [
-    'Check-in, group check-in, corrections to a room for today, seating and clearing tables',
-    'Food Exchange (Novotel): orders, the kitchen screen and the menu; voiding a dish not yet served; payments by cash, card, QR or room charge; closing a bill',
+    'Check-in, group check-in, corrections to a room for today, seating, clearing and merging tables',
+    'Food Exchange (Novotel): orders, the kitchen screen and the menu; voiding a dish not yet served; payments by cash, card, QR or room charge; closing a bill; marking a dish sold out',
   ],
   manager: [
+    "The morning's Opera imports",
     'In-house manifest, meal forecast, analytics, Food Exchange sales and the CSV exports',
-    'On a bill: discounts, complimentary payments, removing a payment, voiding a dish already served, reopening a closed bill, marking dishes sold out',
+    'Editing the floor plan and saved layouts',
+    'On a bill: discounts, complimentary payments, removing a payment, voiding a dish already served, reopening a closed bill',
     'Settings: data status, rate codes, audit log',
   ],
-  admin: ['Opera imports, editing the floor plan and saved layouts, data maintenance'],
+  admin: ['Settings › Data maintenance: permanently removing the records earlier versions wrote'],
 };

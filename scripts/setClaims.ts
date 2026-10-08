@@ -33,9 +33,10 @@ import { getAdminAuth, describeCredential } from './lib/adminApp';
  * role - which is why src/hooks/useAccess.ts reads claims through onIdTokenChanged rather than
  * onAuthStateChanged: a claim refresh changes the token, not the auth state.
  *
- * Roles: staff = the door (check-in, corrections, seating); manager = + manifest, forecast,
- * analytics, settings; admin = + Opera imports, floor-plan editing, data maintenance. A verified
- * @accor.com address is staff without any claim.
+ * Roles: staff = the door (check-in, corrections, seating) and Food Exchange orders, kitchen and
+ * menu; manager = + Opera imports, floor-plan editing, manifest, forecast, analytics, sales,
+ * settings and the bill's manager-only changes; admin = + data maintenance. src/lib/access.ts
+ * lists them in full. A verified @accor.com address is staff without any claim.
  *
  * ## What this deliberately does NOT do
  *

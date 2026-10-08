@@ -1,9 +1,9 @@
 # Hotel Breakfast 2 - where it stands
 
-Updated 8 Oct 2026, after an audit of the layout, services and permissions. 354 tests pass, the
+Updated 8 Oct 2026, after an audit of the layout, services and permissions. 358 tests pass, the
 typecheck is clean, and `npm run build` succeeds. The Firestore rules, orders included, were
-published on 8 Oct; the audit's two rule changes are not yet. GitHub `main` has the code up to the
-orders as one combined commit; the audit is local. None of it is deployed to the app staff open.
+published on 8 Oct; the five rule changes since are not yet. The code is on GitHub `main`; none of
+it is deployed to the app staff open.
 
 ## Done in the 7 Oct audit
 
@@ -82,13 +82,18 @@ another name - while comps were a manager's. Now it is a manager's too, recorded
 and enforced by the rules (once published), and Sales marks those voids "after serving". The audit
 log is readable by managers only, as the screen that shows it always was.
 
+**The owner's decisions, same day.** Managers do the Opera import and keep the floor plan
+(administrators only before); anyone at the door marks a dish sold out - from an order's menu or
+from the kitchen screen's new Sold out list - and each change goes to the audit log. Administrators
+keep only data maintenance.
+
 ## Waiting on the owner
 
 | | Why |
 |---|---|
 | **Publish the new app** where staff open it - AI Studio / Cloud Run | Firebase Hosting is not available on the Starter Tier, and GitHub does not update the live app |
-| **Publish the 8 Oct audit's rules** (FIREBASE_SETUP.md section 1) | audit log for managers only; a served dish voided only by a manager |
-| **Grant manager roles** (`scripts/setClaims.ts`) | nobody has one yet, so discounts, comps, reopening a bill, sold-out dishes and voiding a served dish need an owner account |
+| **Publish `firestore.rules`** (FIREBASE_SETUP.md section 1) - paste and Publish in the console | five changes: two narrower, and the three the owner decided on 8 Oct; Claude's console attempt was stopped by its safety check |
+| **Grant manager roles** (`scripts/setClaims.ts`) | nobody has one yet, so the Opera import, the floor plan, discounts, comps, reopening a bill and voiding a served dish need an owner account |
 | **Approve deleting the dead files** (below) | the deletion was blocked by a safety check; they are unimported and excluded from the build |
 | Admin key for `scripts/` (FIREBASE_SETUP.md) | roles beyond staff, and unattended imports |
 | Settings → Data maintenance, then a real import | production holds only junk and test data |

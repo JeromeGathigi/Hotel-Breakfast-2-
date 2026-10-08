@@ -108,7 +108,7 @@ export const NewOrderDialog: React.FC<{ store: OrdersStore; onClose: () => void;
           <p className="text-sm font-bold mb-2">Table</p>
           {store.errors.tables && <Banner tone="warn">The floor plan could not be loaded: {store.errors.tables}</Banner>}
           {tables.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No tables yet. An administrator can create the floor plan on the Floor plan screen.</p>
+            <p className="text-sm text-muted-foreground">No tables yet. A manager can create the floor plan on the Floor plan screen.</p>
           ) : (
             <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 max-h-64 overflow-y-auto">
               {tables.map((t) => {

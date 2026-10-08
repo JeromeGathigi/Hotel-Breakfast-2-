@@ -25,17 +25,31 @@ What is in production today is junk and test data, not a working day:
 | `hotels/*/tables` | 36 default tables |
 | `hotels/*/auditLogs` | 16 entries, all by the owner |
 
-## 1. Rules: published 8 Oct 2026, twice - and one change since, not yet published
+## 1. Rules: published 8 Oct 2026, twice - and five changes since, NOT yet published
 
-Changed in this repo after the 09:57 publish, during the layout and permissions audit:
+The console still holds the 09:57 version. Changed in this repo since, during the layout and
+permissions audit and the owner's decisions that followed it:
+
+Narrower:
 
 - `auditLogs`: read by managers instead of every staff account. Only Settings, a manager's
   screen, reads the log; hosts keep writing their own entries.
 - `orders`: a host's update must leave `servedVoidThb` unchanged, so voiding a dish that was
   already served is a manager's call, as a comp is. Orders made before the field existed read as 0.
 
-Both only narrow access; nothing the app does today stops working. Until they are published, the
-app itself hides both from hosts, but the database does not yet refuse them.
+Wider, by the owner's decision on 8 Oct 2026:
+
+- `guests`, `metadata`, `forecasts`, `history`: written by managers, who now do the Opera import
+  (administrators only before).
+- `tables` (create, delete, any field) and `layouts`: managers, who now keep the floor plan.
+- `menuState`: anyone at the door, as themselves, marks a dish sold out (managers only before);
+  never deleted. The app writes each change to the audit log too.
+
+Publishing them is the owner's step: Claude's attempt through the console was stopped by the
+coding assistant's safety check ("Security Weaken"), because three of the changes widen access.
+Paste `firestore.rules` into the console as below, then Publish. Until then the app offers these
+to managers and hosts, but the database refuses the three widened ones and still lets hosts read
+the audit log and void a served dish through anything other than the app.
 
 Published again at 09:57 with the Food Exchange orders' three paths - `orders`, `counters` and
 `menuState` - and checked in the Rules Playground: signed out, an order is refused; a verified

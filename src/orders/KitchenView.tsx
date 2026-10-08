@@ -1,15 +1,18 @@
 import React, { useEffect, useState } from 'react';
-import { ChefHat, Printer } from 'lucide-react';
+import { Ban, ChefHat, Printer } from 'lucide-react';
 import { Banner, btn } from '../components/ui';
 import { timeInBangkok } from '../lib/dates';
 import { channelLabel, markServed, minutesSince, type Order } from './orderModel';
 import type { OrdersStore } from './store';
 import { printKitchenTicket } from './printTicket';
+import { dishName, toggleSoldOut } from './menuCatalog';
+import { SoldOutDialog } from './SoldOutDialog';
 
 /**
  * The kitchen's screen: every dish that has been sent and not yet served, oldest ticket first,
  * with how long it has waited. Papaya does this with printed tickets and "hold & fire"; a screen
- * on the pass does the same without a printer, and the waiter sees it go out.
+ * on the pass does the same without a printer, and the waiter sees it go out. The kitchen also
+ * marks dishes sold out here, since it is the first to know.
  */
 
 const WAIT_TONE = (min: number) => (min >= 25 ? 'border-rose-400 bg-rose-50' : min >= 15 ? 'border-amber-400 bg-amber-50' : 'border-border bg-white');
@@ -22,9 +25,10 @@ export function kitchenTickets(orders: Order[]) {
     .sort((a, b) => (a.lines[0].sentAt ?? '').localeCompare(b.lines[0].sentAt ?? ''));
 }
 
-export const KitchenView: React.FC<{ store: OrdersStore }> = ({ store }) => {
+export const KitchenView: React.FC<{ store: OrdersStore; canMarkSoldOut: boolean }> = ({ store, canMarkSoldOut }) => {
   const [now, setNow] = useState(() => new Date());
   const [error, setError] = useState<string | null>(null);
+  const [soldOutOpen, setSoldOutOpen] = useState(false);
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 30_000);
     return () => clearInterval(id);
@@ -43,12 +47,24 @@ export const KitchenView: React.FC<{ store: OrdersStore }> = ({ store }) => {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-3xl font-bold font-display flex items-center gap-2">
-          <ChefHat /> Kitchen
-        </h2>
-        <p className="text-sm text-muted-foreground">Dishes sent from Orders and not yet served. Oldest first; amber after 15 minutes, red after 25.</p>
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-3">
+        <div>
+          <h2 className="text-3xl font-bold font-display flex items-center gap-2">
+            <ChefHat /> Kitchen
+          </h2>
+          <p className="text-sm text-muted-foreground">Dishes sent from Orders and not yet served. Oldest first; amber after 15 minutes, red after 25.</p>
+        </div>
+        {canMarkSoldOut && (
+          <button className={btn.secondary} onClick={() => setSoldOutOpen(true)}>
+            <Ban size={18} /> Sold out{store.soldOut.length ? ` (${store.soldOut.length})` : ''}
+          </button>
+        )}
       </div>
+      {store.soldOut.length > 0 && (
+        <p className="text-sm">
+          <span className="font-bold text-rose-800">Sold out:</span> {store.soldOut.map(dishName).join(' · ')}
+        </p>
+      )}
       {error && (
         <Banner tone="critical" role="alert">
           {error}
@@ -105,6 +121,9 @@ export const KitchenView: React.FC<{ store: OrdersStore }> = ({ store }) => {
             );
           })}
         </div>
+      )}
+      {soldOutOpen && (
+        <SoldOutDialog soldOut={store.soldOut} onToggle={(baseId, out) => store.setSoldOut(toggleSoldOut(store.soldOut, baseId, out))} onClose={() => setSoldOutOpen(false)} />
       )}
     </div>
   );

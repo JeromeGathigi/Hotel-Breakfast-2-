@@ -19,7 +19,7 @@ import {
   type Order,
 } from './orderModel';
 import { grossPriceThb } from '../data/foodExchangeMenu';
-import { buildCatalog, searchCatalog } from './menuCatalog';
+import { buildCatalog, buildDishes, dishName, searchCatalog, toggleSoldOut } from './menuCatalog';
 import { summariseOrders } from './orderReports';
 
 const host = (at = '2026-10-08T05:30:00.000Z') => ({ by: 'host@accor.com', at });
@@ -213,6 +213,21 @@ describe('menu catalogue', () => {
   it('finds dishes by words in any order, or by section and number', () => {
     expect(searchCatalog(catalog, 'soy khao').map((e) => e.name)).toEqual(['Khao Soy Gai']);
     expect(searchCatalog(catalog, 'pizza 3').some((e) => e.name === 'Di Mare')).toBe(true);
+  });
+
+  it('sells out per dish: one entry for Phad Kra Pao, whatever the protein', () => {
+    const dishes = buildDishes();
+    expect(dishes.filter((d) => d.baseId === 'main-thai-1')).toEqual([{ baseId: 'main-thai-1', name: 'Phad Kra Pao', sectionTitle: 'Main — Thai' }]);
+    expect(new Set(dishes.map((d) => d.baseId)).size).toBe(dishes.length);
+    expect(new Set(catalog.map((e) => e.baseId))).toEqual(new Set(dishes.map((d) => d.baseId)));
+    expect(dishName('main-thai-1')).toBe('Phad Kra Pao');
+    expect(dishName('gone-9')).toBe('gone-9');
+  });
+
+  it('marks a dish out once and back again', () => {
+    expect(toggleSoldOut(['a'], 'b', true)).toEqual(['a', 'b']);
+    expect(toggleSoldOut(['a', 'b'], 'b', true)).toEqual(['a', 'b']);
+    expect(toggleSoldOut(['a', 'b'], 'a', false)).toEqual(['b']);
   });
 });
 

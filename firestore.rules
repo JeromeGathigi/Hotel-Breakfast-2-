@@ -46,26 +46,27 @@ service cloud.firestore {
 
     match /hotels/{hotelId} {
 
-      // The in-house list and everything an import writes: administrators only.
+      // The in-house list and everything an import writes: managers, who do the morning import
+      // (administrators only until 8 Oct 2026).
       match /guests/{room} {
         allow read: if isStaff();
-        allow write: if isAdmin();
+        allow write: if isManager();
       }
       match /metadata/{docId} {
         allow read: if isStaff();
-        allow write: if isAdmin();
+        allow write: if isManager();
       }
       match /forecasts/{date} {
         allow read: if isStaff();
-        allow write: if isAdmin();
+        allow write: if isManager();
       }
       match /history/{date} {
         allow read: if isManager();
-        allow write: if isAdmin();
+        allow write: if isManager();
       }
       match /history/{date}/guests/{room} {
         allow read: if isManager();
-        allow write: if isAdmin();
+        allow write: if isManager();
       }
 
       // The door.
@@ -80,11 +81,11 @@ service cloud.firestore {
         allow delete: if isStaff();
       }
 
-      // Hosts seat, clear and merge tables; only administrators change the plan itself.
+      // Hosts seat, clear and merge tables; managers change the plan itself.
       match /tables/{tableId} {
         allow read: if isStaff();
-        allow create, delete: if isAdmin();
-        allow update: if isAdmin() || (
+        allow create, delete: if isManager();
+        allow update: if isManager() || (
           isStaff() &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly([
             'status', 'occupiedByRoom', 'occupiedByGuest', 'occupiedPax', 'occupiedSince',
@@ -94,7 +95,7 @@ service cloud.firestore {
       }
       match /layouts/{layoutId} {
         allow read: if isStaff();
-        allow write: if isAdmin();
+        allow write: if isManager();
       }
 
       // Append-only, and an entry can only be written as yourself. Read in Settings, a manager's
@@ -138,10 +139,12 @@ service cloud.firestore {
         allow create, update: if isStaff() && writtenAsSelf('updatedBy');
         allow delete: if false;
       }
-      // Dishes marked sold out.
+      // Dishes marked sold out - by whoever finds out first: the kitchen, a host, a manager. Each
+      // change is also written to the audit log.
       match /menuState/{docId} {
         allow read: if isStaff();
-        allow write: if isManager() && writtenAsSelf('updatedBy');
+        allow create, update: if isStaff() && writtenAsSelf('updatedBy');
+        allow delete: if false;
       }
 
       // Written only by retired code (the historical seeder and the bulk uploader). Kept readable

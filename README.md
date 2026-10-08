@@ -12,9 +12,15 @@ static hosting, and the Opera imports run in the browser or from `scripts/` with
 
 | Role | How someone gets it | Screens |
 |---|---|---|
-| Staff | a verified `@accor.com` Google account, or a `role: staff` claim | **Door**: Check-in, Floor plan (seating, clearing, merging). At Novotel, **Food Exchange**: Orders, Kitchen, Menu |
-| Manager | `role: manager` claim | + **Management**: In-house manifest, Meal forecast, Breakfast analytics, Food Exchange sales (Novotel), and their CSV exports; Settings. On a bill: discounts, comps, removing a payment, voiding a dish already served, reopening a closed bill, marking dishes sold out |
-| Admin | `role: admin` claim, or an owner account in `src/lib/access.ts` | + **Administration**: Opera import, floor-plan editing, Settings → Data maintenance |
+| Staff | a verified `@accor.com` Google account, or a `role: staff` claim | **Door**: Check-in, Floor plan (seating, clearing, merging). At Novotel, **Food Exchange**: Orders, Kitchen, Menu, and marking a dish sold out |
+| Manager | `role: manager` claim | + **Management**: In-house manifest, Meal forecast, Breakfast analytics, Food Exchange sales (Novotel), and their CSV exports. **Administration**: Opera import, Settings. Editing the floor plan. On a bill: discounts, comps, removing a payment, voiding a dish already served, reopening a closed bill |
+| Admin | `role: admin` claim, or an owner account in `src/lib/access.ts` | + Settings → Data maintenance |
+
+Since 8 Oct 2026, by the owner's decision, managers do the Opera import and keep the floor plan
+(administrators only before), and anyone at the door can mark a dish sold out (managers only
+before); every sold-out change is written to the audit log. Until the matching `firestore.rules`
+is published (FIREBASE_SETUP.md section 1), the database still refuses those three to the newly
+allowed roles.
 
 `firestore.rules` enforces the same roles; hiding a screen is not the protection.
 `src/lib/access.test.ts` fails if the app and the rules drift apart. Claims are set with
@@ -74,7 +80,7 @@ memory).
 
 1. Export from Opera, for each hotel: **Guests INH - By Room** (Delimited Data → Tab) and the
    **package forecast**.
-2. In the app, **Opera import** (administrators): import the guest list, then the forecast. Every import is
+2. In the app, **Opera import** (managers): import the guest list, then the forecast. Every import is
    previewed first. The wrong report or the wrong hotel is refused outright; anything unusual -
    yesterday's list, a list half the size of the last one, a file with no RESORT column - has to
    be ticked before the import runs.
@@ -146,18 +152,18 @@ Firestore database `ai-studio-hotelbreakfast2-acad9cf6-2960-4fc6-9358-4df6deffdf
 
 | Path | Holds | Written by |
 |---|---|---|
-| `guests/{room}` | today's in-house list | admin import |
-| `metadata/reports` | which file, when, by whom, its stats - drives the "not today's list" banner | admin import, written last |
-| `metadata/packages` | each reservation's packages, from the forecast | admin import |
-| `forecasts/{date}` | Opera's package forecast, per day | admin import |
+| `guests/{room}` | today's in-house list | the import (managers) |
+| `metadata/reports` | which file, when, by whom, its stats - drives the "not today's list" banner | the import, written last |
+| `metadata/packages` | each reservation's packages, from the forecast | the import |
+| `forecasts/{date}` | Opera's package forecast, per day | the import |
 | `history/{date}` and `history/{date}/guests/{room}` | a day's summary and its archived list (no notes) | the next day's import |
 | `checkins/{date}/rooms/{id}` | one per room per service; breakfast is `{room}`, other services `{room}~{service}` | the door |
 | `overrides/{room}` | corrections made at the door; each applies to one reservation on one day | the door |
-| `tables/{id}`, `layouts/{id}` | the floor plan and live occupancy | admin (plan), staff (occupancy only) |
+| `tables/{id}`, `layouts/{id}` | the floor plan and live occupancy | managers (plan), staff (occupancy only) |
 | `auditLogs/{id}` | append-only, each entry written as its author; read by managers (Settings) | everyone |
 | `orders/{date-seq}` | Food Exchange orders, with their items, payments and history; never deleted | staff (discounts, comps, removing a payment, voiding a served dish, reopening: managers) |
 | `counters/orders-{date}` | the day's last order number | staff, in the same transaction as the order |
-| `menuState/availability` | dishes marked sold out | managers |
+| `menuState/availability` | dishes marked sold out; each change also in the audit log | anyone at the door, as themselves |
 | `daily_summaries/{date}` | synthetic data from retired code; remove it in Settings → Data maintenance | nobody |
 
 The door keeps working through a Wi-Fi drop: Firestore's own offline cache holds the list, and

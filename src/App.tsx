@@ -218,7 +218,7 @@ function Shell({ role, user }: { role: Role; user: NonNullable<ReturnType<typeof
       case 'orders':
         return <OrdersScreen hotelId={hotel.id} today={today} role={role} />;
       case 'kitchen':
-        return <KitchenScreen hotelId={hotel.id} today={today} />;
+        return <KitchenScreen hotelId={hotel.id} today={today} role={role} />;
       case 'menu':
         return <MenuScreen hotelId={hotel.id} />;
       case 'manifest':

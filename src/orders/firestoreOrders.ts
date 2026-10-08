@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { auth, collection, db, doc, logOperaAuditTrail, onSnapshot, query, runTransaction, sanitizeData, where } from '../firebase';
 import type { DiningTable, Guest } from '../types';
 import { OrderError, openOrder, type Order } from './orderModel';
+import { dishName } from './menuCatalog';
 import type { NewOrderInput, OrderOp, OrdersStore } from './store';
 
 /**
@@ -148,6 +149,12 @@ export function useFirestoreOrders(hotelId: string, from: string, to: string, to
         } catch (e) {
           throw friendly(e);
         }
+        // Any host or cook can change the list, so each change is kept in the audit log too; the
+        // document itself only remembers the last one.
+        const was = new Set(soldOut);
+        const now = new Set(baseIds);
+        for (const id of baseIds) if (!was.has(id)) void logOperaAuditTrail(hotelId, 'MENU', `${dishName(id)} marked sold out`);
+        for (const id of soldOut) if (!now.has(id)) void logOperaAuditTrail(hotelId, 'MENU', `${dishName(id)} available again`);
       },
     }),
     [orders, loading, errors, soldOut, tables, guests, me, hotelId, today]

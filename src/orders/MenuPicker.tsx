@@ -8,18 +8,18 @@ import { formatThb } from './orderModel';
 /**
  * Adding dishes to an order. Prices are the menu's net prices; the gross a guest pays is shown
  * beside them because that is the number they will question. A sold-out dish stays visible but
- * cannot be added - and a manager can mark a dish sold out or back from here.
+ * cannot be added - and whoever learns a dish has run out can mark it sold out or back from here.
  */
 
 const CATALOG = buildCatalog();
 
 export const MenuPicker: React.FC<{
   soldOut: string[];
-  manager: boolean;
+  canMarkSoldOut: boolean;
   onAdd: (entry: CatalogEntry, qty: number, note: string) => Promise<void>;
   onToggleSoldOut: (baseId: string, soldOut: boolean) => Promise<void>;
   onClose: () => void;
-}> = ({ soldOut, manager, onAdd, onToggleSoldOut, onClose }) => {
+}> = ({ soldOut, canMarkSoldOut, onAdd, onToggleSoldOut, onClose }) => {
   const [query, setQuery] = useState('');
   const [section, setSection] = useState<MenuSectionId | 'all'>('all');
   const [picked, setPicked] = useState<CatalogEntry | null>(null);
@@ -134,7 +134,7 @@ export const MenuPicker: React.FC<{
                 <span className="font-bold block">{formatThb(e.unitPriceThb)}</span>
                 <span className="text-xs text-muted-foreground">{formatThb(grossPriceThb(e.unitPriceThb))} +++</span>
               </span>
-              {manager && (
+              {canMarkSoldOut && (
                 <button onClick={() => toggle(e)} title={isOut ? 'Mark available again' : 'Mark sold out'} aria-label={isOut ? `Mark ${e.name} available` : `Mark ${e.name} sold out`} className={`h-11 w-11 rounded-xl border flex items-center justify-center cursor-pointer ${isOut ? 'border-rose-300 bg-rose-50 text-rose-700' : 'border-border text-muted-foreground'}`}>
                   <Ban size={18} />
                 </button>

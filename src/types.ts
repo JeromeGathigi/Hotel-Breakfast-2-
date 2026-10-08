@@ -116,7 +116,7 @@ export interface AuditLogEntry {
   timestamp: any;
   userEmail: string;
   userName: string;
-  action: 'CHECK_IN' | 'CHECK_IN_PARTIAL' | 'CHECK_IN_BATCH' | 'CHECK_OUT_RESET' | 'TABLE_SEAT' | 'TABLE_CLEAR' | 'TABLE_LAYOUT_UPDATE' | 'REPORT_UPLOAD' | 'GUEST_OVERRIDE' | 'GUEST_MANUAL_ADD' | 'DATA_MAINTENANCE' | 'ORDER';
+  action: 'CHECK_IN' | 'CHECK_IN_PARTIAL' | 'CHECK_IN_BATCH' | 'CHECK_OUT_RESET' | 'TABLE_SEAT' | 'TABLE_CLEAR' | 'TABLE_LAYOUT_UPDATE' | 'REPORT_UPLOAD' | 'GUEST_OVERRIDE' | 'GUEST_MANUAL_ADD' | 'DATA_MAINTENANCE' | 'ORDER' | 'MENU';
   roomNumber?: string;
   guestName?: string;
   details: string;

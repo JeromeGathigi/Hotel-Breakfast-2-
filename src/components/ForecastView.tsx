@@ -102,7 +102,7 @@ export const ForecastView: React.FC<{ hotelId: string; today: string }> = ({ hot
       {loading ? (
         <p className="text-center text-muted-foreground py-10">Loading…</p>
       ) : upcoming.length === 0 ? (
-        <Empty title="No forecast for the coming days">An administrator imports Opera's package forecast each morning on the Opera import screen.</Empty>
+        <Empty title="No forecast for the coming days">A manager imports Opera's package forecast each morning on the Opera import screen.</Empty>
       ) : (
         <>
           <div className="grid grid-cols-2 gap-3">

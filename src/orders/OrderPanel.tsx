@@ -27,6 +27,7 @@ import {
 } from './orderModel';
 import type { OrdersStore, OrderOp } from './store';
 import { MenuPicker } from './MenuPicker';
+import { toggleSoldOut } from './menuCatalog';
 import { PaymentDialog } from './PaymentDialog';
 import { printBill, printKitchenTicket } from './printTicket';
 
@@ -52,7 +53,13 @@ type Dialog =
   | { kind: 'void'; line: OrderLine }
   | null;
 
-export const OrderPanel: React.FC<{ order: Order; store: OrdersStore; manager: boolean; onClose: () => void }> = ({ order, store, manager, onClose }) => {
+export const OrderPanel: React.FC<{ order: Order; store: OrdersStore; manager: boolean; canMarkSoldOut: boolean; onClose: () => void }> = ({
+  order,
+  store,
+  manager,
+  canMarkSoldOut,
+  onClose,
+}) => {
   const [dialog, setDialog] = useState<Dialog>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -252,10 +259,10 @@ export const OrderPanel: React.FC<{ order: Order; store: OrdersStore; manager: b
       {dialog?.kind === 'menu' && (
         <MenuPicker
           soldOut={store.soldOut}
-          manager={manager}
+          canMarkSoldOut={canMarkSoldOut}
           onClose={() => setDialog(null)}
           onAdd={(entry, qty, note) => store.apply(order.id, (o, a) => addItem(o, entry, qty, note, a))}
-          onToggleSoldOut={(baseId, out) => store.setSoldOut(out ? [...new Set([...store.soldOut, baseId])] : store.soldOut.filter((id) => id !== baseId))}
+          onToggleSoldOut={(baseId, out) => store.setSoldOut(toggleSoldOut(store.soldOut, baseId, out))}
         />
       )}
       {dialog?.kind === 'pay' && (

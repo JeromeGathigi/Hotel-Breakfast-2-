@@ -135,7 +135,7 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
       (snapshot) => {
         // An empty plan used to be "fixed" by writing the default tables into Firestore from
         // whichever browser happened to open this screen - unawaited, unhandled, and for any
-        // user. Creating the plan is now an explicit administrator action.
+        // user. Creating the plan is now an explicit action for whoever may edit it.
         setEmptyPlan(snapshot.empty);
         if (snapshot.empty) {
           setTables([]);
@@ -694,7 +694,7 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
     }
   };
 
-  /** Writes the architect's default plan for an empty property - an explicit administrator action. */
+  /** Writes the architect's default plan for an empty property - an explicit action, for whoever may edit the plan. */
   const handleCreateDefaultPlan = async () => {
     const defaults = hotelId === 'ibis' ? DEFAULT_IBIS_TABLES : DEFAULT_NOVOTEL_TABLES;
     try {
@@ -754,7 +754,7 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
         >
           {isAdmin
             ? "Creates the architect's table plan. Seats per table are provisional (4) until the restaurant confirms them."
-            : 'Ask an administrator to create it.'}
+            : 'Ask a manager to create it.'}
         </Banner>
       )}
       {/* Header & Host Stand Controls */}

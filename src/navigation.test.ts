@@ -10,14 +10,14 @@ describe('what each role sees', () => {
     expect(seen('staff', 'ibis')).toEqual(['door', 'floor']);
   });
 
-  it('adds the reports and settings for a manager, but not the Opera import', () => {
-    expect(seen('manager', 'novotel')).toEqual(['door', 'floor', 'orders', 'kitchen', 'menu', 'manifest', 'forecast', 'analytics', 'sales', 'settings']);
-    expect(seen('manager', 'ibis')).toEqual(['door', 'floor', 'manifest', 'forecast', 'analytics', 'settings']);
+  it('adds the reports, the Opera import and settings for a manager', () => {
+    expect(seen('manager', 'novotel')).toEqual(['door', 'floor', 'orders', 'kitchen', 'menu', 'manifest', 'forecast', 'analytics', 'sales', 'import', 'settings']);
+    expect(seen('manager', 'ibis')).toEqual(['door', 'floor', 'manifest', 'forecast', 'analytics', 'import', 'settings']);
   });
 
-  it('adds the Opera import for an administrator', () => {
-    expect(seen('admin', 'novotel')).toEqual(['door', 'floor', 'orders', 'kitchen', 'menu', 'manifest', 'forecast', 'analytics', 'sales', 'import', 'settings']);
-    expect(seen('admin', 'ibis')).toContain('import');
+  it('shows an administrator the same screens - data maintenance is a tab inside Settings', () => {
+    expect(seen('admin', 'novotel')).toEqual(seen('manager', 'novotel'));
+    expect(seen('admin', 'ibis')).toEqual(seen('manager', 'ibis'));
   });
 
   it('shows nothing to an account without a role', () => {

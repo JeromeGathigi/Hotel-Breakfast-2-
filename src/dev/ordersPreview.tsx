@@ -112,7 +112,7 @@ function Preview() {
         </label>
       </div>
       {screen === 'orders' && <OrdersView store={store} role={role} date={date} today={today} onDateChange={setDate} />}
-      {screen === 'kitchen' && <KitchenView store={store} />}
+      {screen === 'kitchen' && <KitchenView store={store} canMarkSoldOut={role !== 'none'} />}
       {screen === 'sales' && <SalesView store={store} from={today} to={today} today={today} onRangeChange={() => undefined} />}
     </div>
   );

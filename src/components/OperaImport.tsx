@@ -8,7 +8,8 @@ import { Banner, btn } from './ui';
 const NAME: Record<HotelId, string> = { novotel: 'Novotel', ibis: 'ibis' };
 
 /**
- * Opera import, administrators only - the database lets nobody else write the guest list.
+ * Opera import, for managers and administrators - the database lets nobody else write the guest
+ * list. Administrators only until 8 Oct 2026, when the owner gave the morning import to managers.
  *
  * Both Opera files are imported here, one property at a time, and each import is PLANNED and shown
  * before anything is written: which property the file says it is, whether it is today's, how many

@@ -60,3 +60,25 @@ export function searchCatalog(entries: CatalogEntry[], query: string): CatalogEn
     return words.every((w) => hay.includes(w));
   });
 }
+
+/** One entry per dish - what sells out - for the kitchen's sold-out list. */
+export interface Dish {
+  baseId: string;
+  name: string;
+  sectionTitle: string;
+}
+
+export function buildDishes(items: MenuItem[] = MENU_ITEMS): Dish[] {
+  const titles = new Map(MENU_SECTIONS.map((s) => [s.id, s.title]));
+  return items.map((item) => ({ baseId: baseItemId(item), name: item.name, sectionTitle: titles.get(item.section) ?? item.section }));
+}
+
+const DISH_NAMES = new Map(buildDishes().map((d) => [d.baseId, d.name]));
+
+/** "Phad Kra Pao" for `main-thai-1`; the id itself if the menu no longer has it. */
+export const dishName = (baseId: string) => DISH_NAMES.get(baseId) ?? baseId;
+
+/** The sold-out list after marking one dish out (true) or back (false). */
+export function toggleSoldOut(soldOut: readonly string[], baseId: string, out: boolean): string[] {
+  return out ? [...new Set([...soldOut, baseId])] : soldOut.filter((id) => id !== baseId);
+}

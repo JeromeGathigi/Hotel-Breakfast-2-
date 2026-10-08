@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import type { Role } from '../lib/access';
+import { canMarkSoldOut, type Role } from '../lib/access';
 import { MenuView } from '../components/MenuView';
 import { Banner } from '../components/ui';
 import { useFirestoreOrders, useSoldOut } from './firestoreOrders';
@@ -17,9 +17,9 @@ export function OrdersScreen({ hotelId, today, role }: { hotelId: string; today:
   return <OrdersView store={store} role={role} date={date} today={today} onDateChange={setDate} />;
 }
 
-export function KitchenScreen({ hotelId, today }: { hotelId: string; today: string }) {
+export function KitchenScreen({ hotelId, today, role }: { hotelId: string; today: string; role: Role }) {
   const store = useFirestoreOrders(hotelId, today, today, today, { guests: false, tables: false });
-  return <KitchenView store={store} />;
+  return <KitchenView store={store} canMarkSoldOut={canMarkSoldOut(role)} />;
 }
 
 export function SalesScreen({ hotelId, today }: { hotelId: string; today: string }) {

@@ -46,7 +46,7 @@ export interface DoorViewProps {
   actions: DoorActions;
   /** Managers and admins are told how the alerts get fixed; hosts are told whom to tell. */
   canManage: boolean;
-  /** Present only for a role that may import (administrators): opens the Opera import. */
+  /** Present only for a role that may import (managers and administrators): opens the Opera import. */
   onOpenImport?: () => void;
   ackStore?: AckStore;
 }
@@ -152,7 +152,7 @@ export const DoorView: React.FC<DoorViewProps> = ({ data, service, onServiceChan
     }
   };
 
-  /** Who can make the list right: an administrator imports; anyone else is told whom to ask. */
+  /** Who can make the list right: whoever may import does it; anyone else is told whom to ask. */
   const noListAdvice = onOpenImport
     ? 'Import this morning’s "Guests INH - By Room" export.'
     : canManage
