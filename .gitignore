@@ -1,0 +1,27 @@
+node_modules/
+functions/node_modules/
+functions/lib/
+dist/
+build/
+coverage/
+
+# Secrets — never commit. firebase-applet-config.json holds only public client
+# identifiers and is intentionally tracked; anything below is not.
+.env
+.env.*
+!.env.example
+*serviceAccount*.json
+*service-account*.json
+
+# Opera exports hold guest names. The importer's folders stay on the machine that runs it.
+opera-incoming/
+opera-processed/
+opera-rejected/
+
+# Local tooling
+.DS_Store
+Thumbs.db
+*.log
+.vite/
+.vscode/
+.idea/

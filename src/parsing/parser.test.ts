@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { parseInHouseReport } from './index';
+import { parseInHouseReport, isValidRoomNumber, normalizeRoomNumber } from './index';
 import { entitledPax, hasMealEntitlement, overCapacityLabel, OVER_CAPACITY_REASONS } from '../lib/meals';
+import { assessImport } from '../lib/importGuard';
 import { Guest } from '../types';
 
 describe('Opera In-House Report Parser & Meal Rules', () => {
@@ -249,5 +250,109 @@ describe('Opera In-House Report Parser & Meal Rules', () => {
     expect(room118?.adults).toBe(0);
     expect(room118?.issueType).toBe('no-details');
     expect(result.anomalies.some((a) => a.roomNumber === '118' && a.type === 'no-details')).toBe(true);
+  });
+});
+
+describe('room-number validation (domain rule 8.1)', () => {
+  it('accepts digits with an optional single letter', () => {
+    for (const ok of ['101', '1', '0104', '336A', '336a']) {
+      expect(isValidRoomNumber(ok)).toBe(true);
+    }
+  });
+
+  it('rejects Opera room-CATEGORY codes and layout junk', () => {
+    // Real values that reached the live guests collection on 31 Aug 2026, when the Package
+    // Forecast was uploaded instead of the Guests In-house report.
+    for (const bad of ['KGAGS', 'KGB', 'KGBBC', 'SDDMV', 'SKC', 'TWB', '@1', 'AT 1', 'TOTAL', '']) {
+      expect(isValidRoomNumber(bad)).toBe(false);
+    }
+  });
+
+  it('normalises leading zeros and uppercases the suffix', () => {
+    expect(normalizeRoomNumber('0104')).toBe('104');
+    expect(normalizeRoomNumber('336a')).toBe('336A');
+    expect(normalizeRoomNumber('101')).toBe('101');
+  });
+
+  it('imports zero rooms from a forecast-shaped file and raises one anomaly per row', () => {
+    // REGRESSION: this shape produced eight junk "rooms" keyed by room-type code, with
+    // anomaliesCount: 0. It must now import nothing and say why.
+    const forecastShaped = [
+      'ROOM\tGUEST_NAME\tADULTS\tRESV_NAME_ID',
+      'KGAGS\tFORECAST\t2\t1',
+      'TWB\tFORECAST\t2\t2',
+      'SDDMV\tFORECAST\t4\t3',
+    ].join('\n');
+
+    const result = parseInHouseReport(forecastShaped, 'novotel');
+    expect(result.rooms).toHaveLength(0);
+    expect(result.stats.invalidRoomRows).toBe(3);
+    expect(result.anomalies).toHaveLength(3);
+    expect(result.anomalies[0].type).toBe('corrupted-record');
+    expect(result.anomalies[0].message).toMatch(/Package Forecast/);
+  });
+
+  it('leaves valid room numbers completely unaffected', () => {
+    const valid = [
+      'ROOM\tGUEST_NAME\tADULTS\tRESV_NAME_ID',
+      '101\tGUEST ONE\t2\t1',
+      '0104\tGUEST TWO\t2\t2',
+      '336A\tGUEST THREE\t1\t3',
+    ].join('\n');
+
+    const result = parseInHouseReport(valid, 'novotel');
+    expect(result.stats.invalidRoomRows).toBe(0);
+    expect(result.rooms.map((r) => r.roomNumber).sort()).toEqual(['101', '104', '336A']);
+  });
+});
+
+describe('import guard — refusing the wrong Opera report', () => {
+  const inHouse = [
+    'ROOM\tGUEST_NAME\tADULTS\tRESV_NAME_ID',
+    '101\tGUEST ONE\t2\t1',
+    '102\tGUEST TWO\t2\t2',
+    '103\tGUEST THREE\t2\t3',
+    '104\tGUEST FOUR\t2\t4',
+    '105\tGUEST FIVE\t2\t5',
+    '106\tGUEST SIX\t2\t6',
+    '107\tGUEST SEVEN\t2\t7',
+    '108\tGUEST EIGHT\t2\t8',
+    '109\tGUEST NINE\t2\t9',
+    '110\tGUEST TEN\t2\t10',
+  ].join('\n');
+
+  const forecastShaped = [
+    'ROOM\tGUEST_NAME\tADULTS\tRESV_NAME_ID',
+    'KGAGS\tFORECAST\t2\t1',
+    'TWB\tFORECAST\t2\t2',
+  ].join('\n');
+
+  it('refuses a file named like the Package Forecast even before looking inside', () => {
+    // The exact filename that reached production on 31 Aug 2026.
+    const a = assessImport(parseInHouseReport(inHouse, 'novotel'), 'pkgforecast_84272763.txt');
+    expect(a.ok).toBe(false);
+    expect(a.reason).toMatch(/Package Forecast/);
+    expect(a.reason).toMatch(/Guests INH - By Room/);
+  });
+
+  it('refuses a file that yields no rooms, regardless of forecast rows', () => {
+    // The old guard used `&&`, so zero rooms plus forecast rows passed and was written.
+    const a = assessImport(parseInHouseReport(forecastShaped, 'novotel'), 'export.tsv');
+    expect(a.ok).toBe(false);
+    expect(a.reason).toMatch(/No rooms could be read/);
+    expect(a.reason).toMatch(/KGAGS|room-type/);
+  });
+
+  it('accepts a real in-house export with no warnings', () => {
+    const a = assessImport(parseInHouseReport(inHouse, 'novotel'), 'gibyroom_83896799.txt');
+    expect(a.ok).toBe(true);
+    expect(a.warnings).toEqual([]);
+  });
+
+  it('accepts but warns when the house looks implausibly small', () => {
+    const tiny = ['ROOM\tGUEST_NAME\tADULTS\tRESV_NAME_ID', '101\tGUEST ONE\t2\t1'].join('\n');
+    const a = assessImport(parseInHouseReport(tiny, 'novotel'), 'gibyroom.txt');
+    expect(a.ok).toBe(true);
+    expect(a.warnings.join(' ')).toMatch(/unusually low/);
   });
 });

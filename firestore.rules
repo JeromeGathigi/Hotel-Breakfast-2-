@@ -1,37 +1,153 @@
 rules_version = '2';
+
+// Mirrors src/lib/access.ts. src/lib/access.test.ts reads this file and fails if the admin list
+// or the staff domain drift apart from the app.
+//
+// What changed from the previous rules, and why:
+//  - Roles come from a `role` custom claim ('admin' | 'manager' | 'staff'), which is what
+//    scripts/setClaims.ts writes. The old rules read boolean `admin` / `staff` claims that nothing
+//    ever set, so a role granted with the script had no effect. The booleans are still honoured.
+//  - Email-based access requires email_verified. Without it, anyone able to register an
+//    @accor.com address with an email/password provider would have read guest data.
+//  - Staff can append audit entries (as themselves only) and change table occupancy. The old
+//    catch-all made both admin-only, so every host's audit entry was silently refused and seating
+//    a guest at the door failed for everyone but the owner.
+//  - Paths are listed explicitly; anything else is denied.
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Helper function checking if user is authenticated
-    function isAuthenticated() {
-      return request.auth != null;
-    }
 
-    // Admin role check: custom claim OR email is the primary owner / admin
+    function signedIn() { return request.auth != null; }
+    function claims() { return request.auth.token; }
+    function verified() { return signedIn() && claims().get('email_verified', false) == true; }
+    function mail() { return claims().get('email', '').lower(); }
+    function claimRole() { return claims().get('role', ''); }
+
     function isAdmin() {
-      return isAuthenticated() && (
-        request.auth.token.admin == true ||
-        request.auth.token.email.lower() == 'jeromegathigi@gmail.com' ||
-        request.auth.token.email.lower() == 'admin@novotel-chiangmai.com'
+      return signedIn() && (
+        claimRole() == 'admin' ||
+        claims().get('admin', false) == true ||
+        (verified() && mail() in ['jeromegathigi@gmail.com', 'admin@novotel-chiangmai.com'])
       );
     }
 
-    // Staff role check: staff custom claim, admin, or @accor.com domain
+    function isManager() {
+      return isAdmin() || (signedIn() && claimRole() == 'manager');
+    }
+
     function isStaff() {
-      return isAuthenticated() && (
-        request.auth.token.staff == true ||
-        isAdmin() ||
-        request.auth.token.email.lower().matches('^[^@]+@accor\\.com$')
-      );
+      return isManager() ||
+        (signedIn() && (claimRole() == 'staff' || claims().get('staff', false) == true)) ||
+        (verified() && mail().matches('^[^@]+@accor[.]com$'));
+    }
+
+    function writtenAsSelf(field) {
+      return request.resource.data.get(field, '') == claims().get('email', '');
     }
 
     match /hotels/{hotelId} {
-      match /guests/{guestId}          { allow read: if isStaff(); allow write: if isAdmin(); }
-      match /metadata/{docId}          { allow read: if isStaff(); allow write: if isAdmin(); }
-      match /overrides/{roomNumber}    { allow read: if isStaff(); allow write: if isStaff(); }
-      match /history/{date}/guests/{g} { allow read: if isStaff(); allow write: if isAdmin(); }
-      match /dailyStats/{date}         { allow read: if isStaff(); allow write: if isAdmin(); }
-      match /checkins/{date}/rooms/{r} { allow read: if isStaff(); allow write: if isStaff(); }
-      match /{allChildren=**}          { allow read: if isStaff(); allow write: if isAdmin(); }
+
+      // The in-house list and everything an import writes: administrators only.
+      match /guests/{room} {
+        allow read: if isStaff();
+        allow write: if isAdmin();
+      }
+      match /metadata/{docId} {
+        allow read: if isStaff();
+        allow write: if isAdmin();
+      }
+      match /forecasts/{date} {
+        allow read: if isStaff();
+        allow write: if isAdmin();
+      }
+      match /history/{date} {
+        allow read: if isManager();
+        allow write: if isAdmin();
+      }
+      match /history/{date}/guests/{room} {
+        allow read: if isManager();
+        allow write: if isAdmin();
+      }
+
+      // The door.
+      match /checkins/{date}/rooms/{checkinId} {
+        allow read: if isStaff();
+        allow create, update: if isStaff() && writtenAsSelf('recordedBy');
+        allow delete: if isStaff();
+      }
+      match /overrides/{room} {
+        allow read: if isStaff();
+        allow create, update: if isStaff() && writtenAsSelf('recordedBy');
+        allow delete: if isStaff();
+      }
+
+      // Hosts seat, clear and merge tables; only administrators change the plan itself.
+      match /tables/{tableId} {
+        allow read: if isStaff();
+        allow create, delete: if isAdmin();
+        allow update: if isAdmin() || (
+          isStaff() &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'status', 'occupiedByRoom', 'occupiedByGuest', 'occupiedPax', 'occupiedSince',
+            'mealService', 'mergedInto', 'mergedTables'
+          ])
+        );
+      }
+      match /layouts/{layoutId} {
+        allow read: if isStaff();
+        allow write: if isAdmin();
+      }
+
+      // Append-only, and an entry can only be written as yourself.
+      match /auditLogs/{logId} {
+        allow read: if isStaff();
+        allow create: if isStaff() && writtenAsSelf('userEmail');
+        allow update, delete: if false;
+      }
+
+      // A la carte orders (Food Exchange). Every change is written as the signed-in account, the
+      // history can only grow, and an order is never deleted - it is cancelled with a reason.
+      // Discounts, complimentary amounts, removing a payment and reopening a closed bill are a
+      // manager's call.
+      match /orders/{orderId} {
+        allow read: if isStaff();
+        allow create: if isStaff()
+          && request.resource.data.createdBy == claims().get('email', '')
+          && writtenAsSelf('updatedBy')
+          && request.resource.data.status == 'open';
+        allow update: if isStaff()
+          && writtenAsSelf('updatedBy')
+          && request.resource.data.createdBy == resource.data.createdBy
+          && request.resource.data.number == resource.data.number
+          && request.resource.data.businessDate == resource.data.businessDate
+          && request.resource.data.log.size() > resource.data.log.size()
+          && request.resource.data.log[0:resource.data.log.size()] == resource.data.log
+          && (isManager() || (
+            request.resource.data.discount == resource.data.discount
+            && request.resource.data.compThb == resource.data.compThb
+            && request.resource.data.payments.size() >= resource.data.payments.size()
+            && !(resource.data.status == 'complete' && request.resource.data.status == 'open')
+          ));
+        allow delete: if false;
+      }
+      // Per-day order numbers, taken in the same transaction as the new order.
+      match /counters/{counterId} {
+        allow read: if isStaff();
+        allow create, update: if isStaff() && writtenAsSelf('updatedBy');
+        allow delete: if false;
+      }
+      // Dishes marked sold out.
+      match /menuState/{docId} {
+        allow read: if isStaff();
+        allow write: if isManager() && writtenAsSelf('updatedBy');
+      }
+
+      // Written only by retired code (the historical seeder and the bulk uploader). Kept readable
+      // so Settings > Data maintenance can find synthetic records, deletable by administrators,
+      // never written again.
+      match /daily_summaries/{date} {
+        allow read: if isManager();
+        allow delete: if isAdmin();
+      }
     }
   }
 }

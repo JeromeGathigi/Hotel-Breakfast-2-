@@ -1,20 +1,8 @@
 {
-  "firestore": {
-    "rules": "firestore.rules"
-  },
-  "functions": [
+  "firestore": [
     {
-      "source": "functions",
-      "codebase": "default",
-      "ignore": [
-        "node_modules",
-        ".git",
-        "firebase-debug.log",
-        "firebase-debug.*.log"
-      ],
-      "predeploy": [
-        "npm --prefix \"$RESOURCE_DIR\" run build"
-      ]
+      "database": "ai-studio-hotelbreakfast2-acad9cf6-2960-4fc6-9358-4df6deffdf81",
+      "rules": "firestore.rules"
     }
   ],
   "hosting": {

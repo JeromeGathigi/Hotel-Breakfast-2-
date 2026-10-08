@@ -1,25 +1,168 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import dotenv from 'dotenv';
 import { pathToFileURL } from 'node:url';
-import { initializeApp, applicationDefault, cert } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
+import { FieldValue, type Firestore } from 'firebase-admin/firestore';
+import { describeCredential, getDb, scriptIdentity } from './lib/adminApp';
+import { executeOps, readArchiveInputs, readCurrentList, writeAudit } from './lib/adminImport';
+import { HOTEL_IDS, asHotelId, decodeExport, operaFileKind, pickForecastPlan, routeGuestList, type OperaFileKind } from './lib/routing';
 import { businessDate } from '../src/lib/businessDate';
+import { toJsDate } from '../src/lib/dates';
 import { parseInHouseReport } from '../src/parsing';
-import type { Guest } from '../src/types';
+import { buildForecastImportOps, buildGuestImportOps, planForecastImport, planGuestListImport, type HotelId } from '../src/lib/guestImport';
 
-dotenv.config();
-dotenv.config({ path: '.env.local' });
+/**
+ * Imports Opera exports into Firestore without the app: the same plan, checks and ordered writes
+ * as the Import & export screen (src/lib/guestImport.ts), executed with the Admin SDK.
+ *
+ *     npm run opera:import -- <file or folder> [--hotel=novotel|ibis] [--accept] [--dry-run]
+ *
+ * - The kind of file is read from its content: a "Guests INH - By Room" guest list, or a package
+ *   forecast. The hotel comes from the file (the guest list's RESORT column; the forecast's
+ *   reservations); --hotel or OPERA_HOTEL_ID only fills in when the file cannot say.
+ * - Anything the Import screen would ask a person to confirm - a list that is not today's, a list
+ *   that shrank by half, a file with no RESORT column - is refused unless --accept is given.
+ * - --dry-run reads Firestore and prints the plan; it writes nothing and moves nothing.
+ *
+ * A folder is processed oldest file first. Imported files move to OPERA_ARCHIVE_DIR
+ * (opera-processed); refused ones move to OPERA_REJECTED_DIR (opera-rejected) with a .reason.txt
+ * beside them, so a refused file is never retried silently. A single file named on the command line
+ * is left where it is when refused, for the operator to re-run.
+ *
+ * The folders hold guest names and are git-ignored. Credentials: see scripts/lib/adminApp.ts.
+ */
 
-const HOTEL_ID = process.env.OPERA_HOTEL_ID ?? process.env.VITE_FIREBASE_PROJECT_ID ?? 'novotel';
-const DEFAULT_INCOMING_DIR = path.resolve(process.cwd(), 'opera-incoming');
-const DEFAULT_ARCHIVE_DIR = path.resolve(process.cwd(), 'opera-processed');
-
-function log(message: string, ...args: unknown[]) {
-  console.log(`[opera-import][${new Date().toISOString()}] ${message}`, ...args);
+export interface ImportOptions {
+  /** --hotel. Checked against the file and refused if it disagrees - never trusted over it. */
+  hotel: HotelId | null;
+  /** OPERA_HOTEL_ID. Used only when the file itself cannot say which hotel it is. */
+  configuredHotel: HotelId | null;
+  /** --accept: the operator has read the confirmations and accepts them. */
+  accept: boolean;
+  /** --dry-run: plan and print; write nothing. */
+  dryRun: boolean;
+  /** Business date; defaults to now in Bangkok (04:00 rollover). */
+  today?: string;
 }
 
-async function fileExists(target: string): Promise<boolean> {
+/** Flat on purpose: the project compiles without `strict`, where union narrowing is unreliable. */
+export interface FileOutcome {
+  status: 'imported' | 'planned' | 'refused';
+  kind: OperaFileKind;
+  hotelId: HotelId | null;
+  summary: string;
+  warnings: string[];
+  /** Why the file was refused, or what --accept would accept. Empty unless refused. */
+  reasons: string[];
+}
+
+const HOTEL_HINT = 'Re-run with --hotel=novotel or --hotel=ibis, or set OPERA_HOTEL_ID.';
+
+function log(message: string) {
+  console.log(`[opera-import][${new Date().toISOString()}] ${message}`);
+}
+
+function refused(kind: OperaFileKind, hotelId: HotelId | null, reasons: string[], warnings: string[] = [], summary = 'refused'): FileOutcome {
+  return { status: 'refused', kind, hotelId, summary, warnings, reasons };
+}
+
+export async function processFile(filePath: string, opts: ImportOptions): Promise<FileOutcome> {
+  const filename = path.basename(filePath);
+  const rawText = decodeExport(await fs.readFile(filePath));
+  const today = opts.today ?? businessDate();
+  const db = await getDb();
+  return operaFileKind(rawText) === 'package-forecast'
+    ? importForecast(db, rawText, filename, today, opts)
+    : importGuestList(db, rawText, filename, today, opts);
+}
+
+async function importGuestList(db: Firestore, rawText: string, filename: string, today: string, opts: ImportOptions): Promise<FileOutcome> {
+  // Rows without a RESORT value take this hotel; when the file has RESORT values they win.
+  const parsed = parseInHouseReport(rawText, opts.hotel ?? opts.configuredHotel ?? 'novotel', { today });
+  const route = routeGuestList(parsed, opts.hotel, opts.configuredHotel);
+  if (!route.hotelId) return refused('guest-list', null, [`${route.reason} ${HOTEL_HINT}`]);
+  const hotelId = route.hotelId;
+
+  const current = await readCurrentList(db, hotelId);
+  const plan = planGuestListImport({
+    parsed,
+    filename,
+    rawText,
+    targetHotelId: hotelId,
+    today,
+    current: { roomIds: current.guests.map((g) => g.roomNumber), metadataDate: current.metadataDate },
+    packages: current.packages,
+  });
+  if (!plan.ok) return refused('guest-list', hotelId, [plan.reason]);
+
+  const summary =
+    `${plan.rooms.length} rooms into ${hotelId}: ${plan.addedRoomIds.length} arrived, ${plan.removedRoomIds.length} departed` +
+    (plan.archiveDate ? `, the ${plan.archiveDate} list archived first` : '') +
+    `; breakfast ${plan.stats.totalEntitledBreakfast} pax confirmed, ${plan.stats.totalUnverifiedBreakfast ?? 0} to check`;
+  if (plan.confirmations.length && !opts.accept) {
+    return refused('guest-list', hotelId, plan.confirmations, plan.warnings, `needs --accept (${summary})`);
+  }
+  if (opts.dryRun) return { status: 'planned', kind: 'guest-list', hotelId, summary, warnings: plan.warnings, reasons: [] };
+
+  const identity = await scriptIdentity();
+  const archive = plan.archiveDate ? await readArchiveInputs(db, hotelId, plan.archiveDate) : { checkins: [], overrides: [] };
+  const ops = buildGuestImportOps(plan, {
+    filename,
+    importedBy: identity,
+    today,
+    currentGuests: current.guests,
+    archiveCheckins: archive.checkins,
+    overrides: archive.overrides,
+    packages: current.packages,
+    timestamp: FieldValue.serverTimestamp(),
+    toDate: toJsDate,
+  });
+  await executeOps(db, ops);
+  const warnings = [...plan.warnings, ...(await audit(db, hotelId, `Imported "${filename}": ${summary}`, identity))];
+  return { status: 'imported', kind: 'guest-list', hotelId, summary, warnings, reasons: [] };
+}
+
+async function importForecast(db: Firestore, rawText: string, filename: string, today: string, opts: ImportOptions): Promise<FileOutcome> {
+  // The forecast names no property: compare its reservations with BOTH hotels' current lists.
+  const lists = await Promise.all(HOTEL_IDS.map((h) => readCurrentList(db, h)));
+  const currentResvIds: Partial<Record<HotelId, string[]>> = {};
+  HOTEL_IDS.forEach((h, i) => (currentResvIds[h] = lists[i].guests.map((g) => g.resvNameId).filter(Boolean)));
+
+  const targets = opts.hotel ? [opts.hotel] : [...HOTEL_IDS];
+  const plans = targets.map((h) => planForecastImport({ rawText, filename, targetHotelId: h, today, currentResvIds }));
+  const { plan, reason } = pickForecastPlan(plans, opts.configuredHotel);
+  if (!plan) return refused('package-forecast', null, [opts.hotel ? reason : `${reason} ${HOTEL_HINT}`]);
+  if (!plan.ok) return refused('package-forecast', plan.hotelId, [plan.reason]);
+
+  const summary =
+    `${plan.forecastDocs.length} days into ${plan.hotelId}` +
+    (plan.index ? `, packages for ${plan.index.reservations} reservations` : '') +
+    (plan.todayBreakfast !== null ? `; ${plan.todayBreakfast} breakfasts forecast for ${today}` : '');
+  if (plan.confirmations.length && !opts.accept) {
+    return refused('package-forecast', plan.hotelId, plan.confirmations, plan.warnings, `needs --accept (${summary})`);
+  }
+  if (opts.dryRun) return { status: 'planned', kind: 'package-forecast', hotelId: plan.hotelId, summary, warnings: plan.warnings, reasons: [] };
+
+  const identity = await scriptIdentity();
+  await executeOps(db, buildForecastImportOps(plan, { importedBy: identity, timestamp: FieldValue.serverTimestamp() }));
+  const warnings = [...plan.warnings, ...(await audit(db, plan.hotelId, `Imported package forecast "${filename}": ${summary}`, identity))];
+  return { status: 'imported', kind: 'package-forecast', hotelId: plan.hotelId, summary, warnings, reasons: [] };
+}
+
+/** The import has already landed; a failed audit entry is reported, not turned into a failed import that would be retried. */
+async function audit(db: Firestore, hotelId: HotelId, details: string, identity: string): Promise<string[]> {
+  try {
+    await writeAudit(db, hotelId, details, identity, FieldValue.serverTimestamp(), { source: 'scripts/importOpera.ts' });
+    return [];
+  } catch (error) {
+    return [`The import was written, but its audit-log entry failed: ${(error as Error)?.message ?? error}`];
+  }
+}
+
+/* =========================================================================
+   FILES AND FOLDERS
+   ========================================================================= */
+
+async function exists(target: string): Promise<boolean> {
   try {
     await fs.access(target);
     return true;
@@ -28,236 +171,152 @@ async function fileExists(target: string): Promise<boolean> {
   }
 }
 
-async function resolveServiceAccount(): Promise<Record<string, unknown> | null> {
-  const envJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON ?? process.env.OPERA_SERVICE_ACCOUNT_JSON;
-  if (envJson) {
-    try {
-      return JSON.parse(envJson);
-    } catch (error) {
-      throw new Error(`FIREBASE_SERVICE_ACCOUNT_JSON is invalid: ${(error as Error).message}`);
-    }
+/** Moves a file into `dir` without overwriting anything already there. */
+export async function moveInto(dir: string, filePath: string): Promise<string> {
+  await fs.mkdir(dir, { recursive: true });
+  const ext = path.extname(filePath);
+  const base = path.basename(filePath, ext);
+  let target = path.join(dir, `${base}${ext}`);
+  for (let n = 1; await exists(target); n++) target = path.join(dir, `${base}-${n}${ext}`);
+  try {
+    await fs.rename(filePath, target);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'EXDEV') throw error;
+    await fs.copyFile(filePath, target); // another drive: rename cannot cross it
+    await fs.unlink(filePath);
   }
-
-  const candidates = [
-    process.env.FIREBASE_SERVICE_ACCOUNT_PATH,
-    process.env.OPERA_SERVICE_ACCOUNT_PATH,
-    path.resolve(process.cwd(), 'firebase-service-account.json'),
-  ].filter((value): value is string => Boolean(value));
-
-  for (const candidate of candidates) {
-    if (await fileExists(candidate)) {
-      const fileText = await fs.readFile(candidate, 'utf8');
-      return JSON.parse(fileText);
-    }
-  }
-
-  return null;
+  return target;
 }
 
-async function resolveFirestoreDatabaseId(): Promise<string> {
-  const envDbId = process.env.FIRESTORE_DATABASE_ID;
-  if (envDbId) return envDbId;
-
-  const configPath = path.resolve(process.cwd(), 'firebase-applet-config.json');
-  if (await fileExists(configPath)) {
-    try {
-      const configText = await fs.readFile(configPath, 'utf8');
-      const config = JSON.parse(configText);
-      if (config.firestoreDatabaseId) {
-        return config.firestoreDatabaseId;
-      }
-    } catch {
-      // continue to throw
-    }
-  }
-
-  throw new Error('Missing Firestore database ID. Set FIRESTORE_DATABASE_ID or check firebase-applet-config.json.');
+async function quarantine(dir: string, filePath: string, reasons: string[]): Promise<string> {
+  const target = await moveInto(dir, filePath);
+  const note = [`${path.basename(filePath)} was not imported (${new Date().toISOString()}):`, '', ...reasons.map((r) => `- ${r}`), ''];
+  await fs.writeFile(`${target}.reason.txt`, note.join('\n'), 'utf8');
+  return target;
 }
 
-let cachedDb: ReturnType<typeof getFirestore> | null = null;
-
-async function getDb() {
-  if (cachedDb) return cachedDb;
-
-  const databaseId = await resolveFirestoreDatabaseId();
-  const serviceAccount = await resolveServiceAccount();
-  const projectId = process.env.VITE_FIREBASE_PROJECT_ID ?? process.env.FIREBASE_PROJECT_ID;
-
-  let app;
-  if (serviceAccount) {
-    app = initializeApp({
-      credential: cert(serviceAccount as any),
-      projectId: (serviceAccount as any).project_id || projectId,
-    });
-  } else if (projectId) {
-    app = initializeApp({
-      projectId,
-      credential: applicationDefault(),
-    });
+export function report(file: string, outcome: FileOutcome) {
+  const name = path.basename(file);
+  const what = outcome.kind === 'package-forecast' ? 'forecast' : 'guest list';
+  if (outcome.status === 'refused') {
+    log(`REFUSED ${what} ${name}: ${outcome.summary}`);
+    outcome.reasons.forEach((r) => log(`  - ${r}`));
   } else {
-    throw new Error('Missing Firebase configuration. Set VITE_FIREBASE_PROJECT_ID and either a service account or ADC credentials.');
+    log(`${outcome.status === 'planned' ? 'DRY RUN' : 'Imported'} ${what} ${name}: ${outcome.summary}`);
   }
-
-  cachedDb = getFirestore(app, databaseId);
-  return cachedDb;
+  outcome.warnings.forEach((w) => log(`  note: ${w}`));
 }
 
-function buildGuestRecord(room: ReturnType<typeof parseInHouseReport>['rooms'][number], hotelId: string = 'novotel'): Guest {
+export interface DirectoryOptions extends ImportOptions {
+  processedDir: string;
+  rejectedDir: string;
+  /** Files modified more recently than this are skipped: Opera may still be writing them. */
+  settleMs: number;
+  /** A file that keeps failing (not refusing) is quarantined after this many attempts. */
+  maxAttempts: number;
+}
+
+const OPERA_FILE = /\.(txt|tsv|csv)$/i;
+
+/**
+ * One pass over a folder. `failures` carries attempt counts between passes of the watcher;
+ * `processOne` is replaceable so the file handling can be tested without Firestore.
+ */
+export async function processDirectory(
+  dir: string,
+  opts: DirectoryOptions,
+  failures = new Map<string, number>(),
+  processOne: (file: string, opts: ImportOptions) => Promise<FileOutcome> = processFile
+): Promise<FileOutcome[]> {
+  const entries = await fs.readdir(dir, { withFileTypes: true });
+  const files: { file: string; mtime: number }[] = [];
+  for (const e of entries) {
+    if (!e.isFile() || !OPERA_FILE.test(e.name)) continue;
+    const file = path.join(dir, e.name);
+    files.push({ file, mtime: (await fs.stat(file)).mtimeMs });
+  }
+  files.sort((a, b) => a.mtime - b.mtime); // a backlog imports in the order Opera produced it
+
+  const outcomes: FileOutcome[] = [];
+  for (const { file, mtime } of files) {
+    // Only when asked: NTFS times have sub-millisecond precision, so a file written this millisecond
+    // can look newer than Date.now() and would be skipped even with settleMs = 0.
+    if (opts.settleMs > 0 && Date.now() - mtime < opts.settleMs) continue;
+    try {
+      const outcome = await processOne(file, opts);
+      report(file, outcome);
+      outcomes.push(outcome);
+      failures.delete(file);
+      if (opts.dryRun) continue;
+      if (outcome.status === 'imported') await moveInto(opts.processedDir, file);
+      else if (outcome.status === 'refused') log(`  moved to ${await quarantine(opts.rejectedDir, file, outcome.reasons)}`);
+    } catch (error) {
+      const attempts = (failures.get(file) ?? 0) + 1;
+      failures.set(file, attempts);
+      const message = (error as Error)?.message ?? String(error);
+      log(`FAILED ${path.basename(file)} (attempt ${attempts} of ${opts.maxAttempts}): ${message}`);
+      if (attempts >= opts.maxAttempts && !opts.dryRun) {
+        failures.delete(file);
+        log(`  moved to ${await quarantine(opts.rejectedDir, file, [`Failed ${attempts} times. Last error: ${message}`])}`);
+      }
+    }
+  }
+  return outcomes;
+}
+
+/* =========================================================================
+   COMMAND LINE
+   ========================================================================= */
+
+export function directoryOptionsFromEnv(overrides: Partial<DirectoryOptions> = {}): DirectoryOptions {
+  const configured = process.env.OPERA_HOTEL_ID;
+  if (configured && !asHotelId(configured)) {
+    log(`OPERA_HOTEL_ID="${configured}" is not novotel or ibis and is ignored. Files must name their hotel.`);
+  }
   return {
-    roomNumber: room.roomNumber,
-    guestName: room.guestName ?? '',
-    arrivalDate: room.arrivalDate,
-    departureDate: room.departureDate,
-    mealPlan: room.mealPlan,
-    adults: Number(room.adults) || 0,
-    children: Number(room.children) || 0,
-    resvNameId: room.resvNameId,
-    accompanyingGuests: room.accompanyingGuests ?? [],
-    vipStatus: room.vipStatus ?? null,
-    issueType: room.issueType ?? null,
-    hotelId: room.hotelId || hotelId,
-    lastUpdated: new Date().toISOString(),
+    hotel: null,
+    configuredHotel: asHotelId(configured),
+    accept: false,
+    dryRun: false,
+    processedDir: path.resolve(process.cwd(), process.env.OPERA_ARCHIVE_DIR ?? 'opera-processed'),
+    rejectedDir: path.resolve(process.cwd(), process.env.OPERA_REJECTED_DIR ?? 'opera-rejected'),
+    settleMs: 0,
+    maxAttempts: 5,
+    ...overrides,
   };
 }
 
-async function archiveFile(filePath: string) {
-  const archiveDir = process.env.OPERA_ARCHIVE_DIR ?? DEFAULT_ARCHIVE_DIR;
-  await fs.mkdir(archiveDir, { recursive: true });
-  const fileName = path.basename(filePath);
-  const target = path.join(archiveDir, fileName);
-  const finalTarget = await uniqueArchiveTarget(target);
-  await fs.rename(filePath, finalTarget);
-  return finalTarget;
-}
-
-async function uniqueArchiveTarget(target: string): Promise<string> {
-  let candidate = target;
-  let counter = 1;
-  while (await fileExists(candidate)) {
-    const ext = path.extname(target);
-    const base = path.basename(target, ext);
-    candidate = path.join(path.dirname(target), `${base}-${counter}${ext}`);
-    counter += 1;
-  }
-  return candidate;
-}
-
-export async function importFile(filePath: string, hotelId: string = HOTEL_ID) {
-  const rawText = await fs.readFile(filePath, 'utf8');
-  const parsed = parseInHouseReport(rawText, hotelId);
-
-  if (parsed.rooms.length === 0) {
-    throw new Error(`No rows parsed from ${filePath}. Check that the file is a valid Opera Guest In-house export.`);
-  }
-
-  const db = await getDb();
-  const guestsCollection = db.collection('hotels').doc(hotelId).collection('guests');
-  const metadataRef = db.collection('hotels').doc(hotelId).collection('metadata').doc('reports');
-
-  const BATCH_SIZE = 400;
-  const newRoomIds = new Set<string>();
-
-  // 1. Perform SETS first in chunks of <= 400
-  let setBatch = db.batch();
-  let opCount = 0;
-
-  for (const room of parsed.rooms) {
-    const guest = buildGuestRecord(room, hotelId);
-    newRoomIds.add(guest.roomNumber);
-    setBatch.set(guestsCollection.doc(guest.roomNumber), {
-      ...guest,
-      lastUpdated: new Date(),
-      vipStatus: guest.vipStatus ?? null,
-      issueType: guest.issueType ?? null,
-    });
-    opCount++;
-
-    if (opCount >= BATCH_SIZE) {
-      await setBatch.commit();
-      setBatch = db.batch();
-      opCount = 0;
-    }
-  }
-
-  if (opCount > 0) {
-    await setBatch.commit();
-  }
-
-  // 2. Perform DELETES of old rooms no longer in the active export
-  const existingDocs = await guestsCollection.listDocuments();
-  let deleteBatch = db.batch();
-  opCount = 0;
-
-  for (const docRef of existingDocs) {
-    if (!newRoomIds.has(docRef.id)) {
-      deleteBatch.delete(docRef);
-      opCount++;
-      if (opCount >= BATCH_SIZE) {
-        await deleteBatch.commit();
-        deleteBatch = db.batch();
-        opCount = 0;
-      }
-    }
-  }
-
-  if (opCount > 0) {
-    await deleteBatch.commit();
-  }
-
-  // 3. Set metadata
-  await metadataRef.set({
-    date: businessDate(),
-    lastUploaded: new Date(),
-    uploadedBy: 'opera-automation',
-  });
-
-  log(`Imported ${parsed.rooms.length} rooms into hotel ${hotelId} from ${path.basename(filePath)}.`);
-  return parsed;
-}
-
-export async function importDirectory(targetDir: string, hotelId: string = HOTEL_ID) {
-  const entries = await fs.readdir(targetDir, { withFileTypes: true });
-  const files = entries
-    .filter((entry) => entry.isFile() && /\.(txt|csv)$/i.test(entry.name))
-    .map((entry) => path.join(targetDir, entry.name));
-
-  if (files.length === 0) {
-    log(`No new Opera files found in ${targetDir}.`);
-    return [];
-  }
-
-  const results: { file: string; stats: ReturnType<typeof parseInHouseReport>['stats'] }[] = [];
-
-  for (const file of files) {
-    const parsed = await importFile(file, hotelId);
-    const archived = await archiveFile(file);
-    results.push({ file: archived, stats: parsed.stats });
-  }
-
-  return results;
-}
-
 async function main() {
-  const rawTarget = process.argv[2] ?? process.env.OPERA_IMPORT_DIR ?? DEFAULT_INCOMING_DIR;
-  const resolvedTarget = path.resolve(process.cwd(), rawTarget);
-  const hotelId = process.env.OPERA_HOTEL_ID ?? HOTEL_ID;
+  const args = process.argv.slice(2);
+  const flag = (name: string) => args.find((a) => a === `--${name}` || a.startsWith(`--${name}=`));
+  const unknown = args.filter((a) => a.startsWith('--') && !/^--(hotel=.+|accept|dry-run)$/.test(a));
+  if (unknown.length) throw new Error(`Unknown option ${unknown.join(' ')}. Options: --hotel=novotel|ibis --accept --dry-run`);
 
-  if (await fileExists(resolvedTarget) && (await fs.stat(resolvedTarget)).isFile()) {
-    await importFile(resolvedTarget, hotelId);
-    await archiveFile(resolvedTarget);
-    log(`Completed single-file import for ${resolvedTarget}.`);
+  const hotelArg = flag('hotel')?.split('=')[1];
+  const hotel = hotelArg === undefined ? null : asHotelId(hotelArg);
+  if (hotelArg !== undefined && !hotel) throw new Error(`--hotel must be novotel or ibis, not "${hotelArg}".`);
+
+  const opts = directoryOptionsFromEnv({ hotel, accept: Boolean(flag('accept')), dryRun: Boolean(flag('dry-run')) });
+  const target = path.resolve(process.cwd(), args.find((a) => !a.startsWith('--')) ?? process.env.OPERA_IMPORT_DIR ?? 'opera-incoming');
+
+  log(`${await describeCredential()}${opts.dryRun ? ' - DRY RUN, nothing will be written' : ''}`);
+
+  if ((await exists(target)) && (await fs.stat(target)).isFile()) {
+    const outcome = await processFile(target, opts);
+    report(target, outcome);
+    if (outcome.status === 'imported') log(`  moved to ${await moveInto(opts.processedDir, target)}`);
+    if (outcome.status === 'refused') process.exitCode = 2;
     return;
   }
 
-  if (!(await fileExists(resolvedTarget))) {
-    await fs.mkdir(resolvedTarget, { recursive: true });
-    log(`Created watch directory ${resolvedTarget}.`);
+  if (!(await exists(target))) {
+    await fs.mkdir(target, { recursive: true });
+    log(`Created ${target}. Drop Opera exports here and run again.`);
+    return;
   }
-
-  const results = await importDirectory(resolvedTarget, hotelId);
-  if (results.length > 0) {
-    console.table(results.map((result) => ({ file: path.basename(result.file), rooms: result.stats.totalRooms, breakfastPax: result.stats.totalBreakfastPax })));
-  }
+  const outcomes = await processDirectory(target, opts);
+  if (outcomes.length === 0) log(`No Opera files in ${target}.`);
+  if (outcomes.some((o) => o.status === 'refused')) process.exitCode = 2;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

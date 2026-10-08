@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   db, 
   doc, 
@@ -7,33 +7,20 @@ import {
   logOperaAuditTrail 
 } from '../firebase';
 import { parseInHouseReport, ParseResult } from '../parsing';
+import { assessImport } from '../lib/importGuard';
 import { businessDate } from '../lib/businessDate';
-import { AutomatedSyncManager } from './AutomatedSyncManager';
-import { 
-  Upload, 
-  FileText, 
-  CheckCircle, 
-  Database,
-  RefreshCw,
-  Zap
-} from 'lucide-react';
+import { AlertTriangle, CheckCircle, Database, FileText, Upload } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  SAMPLE_NOVOTEL_GUESTS, 
-  SAMPLE_IBIS_GUESTS, 
-  SAMPLE_NOVOTEL_FORECAST, 
-  SAMPLE_IBIS_FORECAST 
-} from '../parsing/__fixtures__/sampleData';
 
 interface ReportUploaderProps {
   hotelId: string;
 }
 
 export const ReportUploader: React.FC<ReportUploaderProps> = ({ hotelId }) => {
-  const [mainMode, setMainMode] = useState<'automated' | 'manual'>('automated');
   const [file, setFile] = useState<File | null>(null);
   const [parsing, setParsing] = useState(false);
   const [parseResult, setParseResult] = useState<ParseResult | null>(null);
+  const [parsedFilename, setParsedFilename] = useState<string>('');
   const [uploading, setUploading] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -53,6 +40,7 @@ export const ReportUploader: React.FC<ReportUploaderProps> = ({ hotelId }) => {
       const text = evt.target?.result as string;
       const result = parseInHouseReport(text, hotelId);
       setParseResult(result);
+      setParsedFilename(f.name);
       setParsing(false);
     };
     reader.onerror = () => {
@@ -62,8 +50,15 @@ export const ReportUploader: React.FC<ReportUploaderProps> = ({ hotelId }) => {
     reader.readAsText(f);
   };
 
+  /** Refuses the wrong Opera report before anything is written. See src/lib/importGuard.ts. */
+  const assessment = useMemo(
+    () => (parseResult ? assessImport(parseResult, parsedFilename) : null),
+    [parseResult, parsedFilename]
+  );
+
   const handleSyncToDatabase = async () => {
     if (!parseResult) return;
+    if (assessment && !assessment.ok) return;
     setUploading(true);
     const today = businessDate();
 
@@ -105,7 +100,13 @@ export const ReportUploader: React.FC<ReportUploaderProps> = ({ hotelId }) => {
           stats: {
             totalRooms: hotelRooms.length,
             totalGuests: hotelRooms.reduce((a, b) => a + (b.adults || 0) + (b.children || 0), 0),
-            totalEntitledBreakfast: parseResult.stats.totalBreakfastPax,
+            // `totalEntitledBreakfast: stats.totalBreakfastPax` used to sit here, and
+            // totalBreakfastPax was occupancy with no entitlement check - the field name
+            // asserted something never computed, and every consumer of metadata/reports
+            // inherited it. These three are the real split.
+            totalEntitledBreakfast: parseResult.stats.breakfastIncludedPax,
+            totalUnverifiedBreakfast: parseResult.stats.breakfastUnverifiedPax,
+            unverifiedRateCodes: parseResult.stats.breakfastUnverifiedCodes,
             totalEntitledDinner: parseResult.stats.totalDinnerPax,
             vipCount: hotelRooms.filter(g => g.vipStatus).length,
             anomaliesCount: parseResult.anomalies.length,
@@ -135,70 +136,6 @@ export const ReportUploader: React.FC<ReportUploaderProps> = ({ hotelId }) => {
     }
   };
 
-  const handleReloadSampleData = async () => {
-    if (!confirm('Reload default Opera sample data for both Novotel and ibis?')) return;
-    setUploading(true);
-    try {
-      const today = businessDate();
-
-      // Novotel Batch
-      const batchNovotel = writeBatch(db);
-      SAMPLE_NOVOTEL_GUESTS.forEach((g) => {
-        batchNovotel.set(doc(db, 'hotels', 'novotel', 'guests', g.roomNumber), g);
-      });
-      SAMPLE_NOVOTEL_FORECAST.forEach((f) => {
-        batchNovotel.set(doc(db, 'hotels', 'novotel', 'forecasts', f.date), f);
-      });
-      batchNovotel.set(doc(db, 'hotels', 'novotel', 'metadata', 'reports'), {
-        date: today,
-        hotelId: 'novotel',
-        lastUploaded: serverTimestamp(),
-        filename: 'novotel-sample-2026-08-28.tsv',
-        stats: {
-          totalRooms: SAMPLE_NOVOTEL_GUESTS.length,
-          totalGuests: 25,
-          totalEntitledBreakfast: 22,
-          totalEntitledDinner: 3,
-          vipCount: 6,
-          anomaliesCount: 0,
-        },
-      });
-      await batchNovotel.commit();
-
-      // ibis Batch
-      const batchIbis = writeBatch(db);
-      SAMPLE_IBIS_GUESTS.forEach((g) => {
-        batchIbis.set(doc(db, 'hotels', 'ibis', 'guests', g.roomNumber), g);
-      });
-      SAMPLE_IBIS_FORECAST.forEach((f) => {
-        batchIbis.set(doc(db, 'hotels', 'ibis', 'forecasts', f.date), f);
-      });
-      batchIbis.set(doc(db, 'hotels', 'ibis', 'metadata', 'reports'), {
-        date: today,
-        hotelId: 'ibis',
-        lastUploaded: serverTimestamp(),
-        filename: 'ibis-sample-2026-08-28.tsv',
-        stats: {
-          totalRooms: SAMPLE_IBIS_GUESTS.length,
-          totalGuests: 18,
-          totalEntitledBreakfast: 17,
-          totalEntitledDinner: 0,
-          vipCount: 4,
-          anomaliesCount: 0,
-        },
-      });
-      await batchIbis.commit();
-
-      await logOperaAuditTrail(hotelId, 'REPORT_UPLOAD', 'Reloaded official Opera sample test datasets for both properties');
-
-      setSuccessMessage('Successfully refreshed sample database for Novotel & ibis.');
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setUploading(false);
-    }
-  };
-
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
       {/* Header */}
@@ -207,57 +144,16 @@ export const ReportUploader: React.FC<ReportUploaderProps> = ({ hotelId }) => {
           <div className="flex items-center gap-2">
             <span className="label-mono text-accent">Opera PMS Integration</span>
             <span className="text-xs text-muted-foreground">•</span>
-            <span className="font-mono-custom text-xs font-semibold text-muted-foreground">Automated & Historical Data Hub</span>
+            <span className="font-mono-custom text-xs font-semibold text-muted-foreground">Manual import</span>
           </div>
           <h2 className="text-2xl font-bold font-display text-foreground mt-1 tracking-tight">
             Opera Data & Synchronization Hub
           </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Automated Daily Ingestion, Historical Backfill, and Manual File Upload for Novotel & ibis.
+            Import the Opera "Guests INH - By Room" export for Novotel or ibis.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <div className="p-1 rounded-xl bg-[#F2EBE4]/60 border border-border flex items-center gap-1">
-            <button
-              onClick={() => setMainMode('automated')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-mono-custom font-bold transition-all cursor-pointer ${
-                mainMode === 'automated'
-                  ? 'bg-black text-white shadow-xs'
-                  : 'text-foreground hover:bg-[#F2EBE4]'
-              }`}
-            >
-              <span className="flex items-center gap-1.5">
-                <Zap size={13} className={mainMode === 'automated' ? 'text-amber-400' : 'text-accent'} />
-                Automated & Historical Hub
-              </span>
-            </button>
-
-            <button
-              onClick={() => setMainMode('manual')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-mono-custom font-bold transition-all cursor-pointer ${
-                mainMode === 'manual'
-                  ? 'bg-black text-white shadow-xs'
-                  : 'text-foreground hover:bg-[#F2EBE4]'
-              }`}
-            >
-              <span className="flex items-center gap-1.5">
-                <Upload size={13} />
-                Manual TSV / CSV Upload
-              </span>
-            </button>
-          </div>
-
-          <button
-            onClick={handleReloadSampleData}
-            disabled={uploading}
-            className="px-3 py-2 rounded-xl border border-border bg-white hover:bg-[#F2EBE4]/50 text-foreground font-mono-custom font-medium text-xs flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
-            title="Reload official sample Opera datasets"
-          >
-            <RefreshCw size={12} className="text-accent" />
-            <span className="hidden sm:inline">Reload Samples</span>
-          </button>
-        </div>
       </div>
 
       {/* Success Notification */}
@@ -275,14 +171,7 @@ export const ReportUploader: React.FC<ReportUploaderProps> = ({ hotelId }) => {
         )}
       </AnimatePresence>
 
-      {/* MODE 1: Automated Sync & Historical Backfill */}
-      {mainMode === 'automated' && (
-        <AutomatedSyncManager hotelId={hotelId} />
-      )}
-
-      {/* MODE 2: Manual TSV / CSV Upload */}
-      {mainMode === 'manual' && (
-        <div className="space-y-6">
+      <div className="space-y-6">
           {/* Drag and drop upload zone */}
           <div className="p-10 rounded-2xl border-2 border-dashed border-border bg-white hover:border-accent/40 transition-all text-center space-y-4 shadow-luxury">
             <div className="w-12 h-12 rounded-2xl bg-accent/10 text-accent mx-auto flex items-center justify-center">
@@ -309,6 +198,37 @@ export const ReportUploader: React.FC<ReportUploaderProps> = ({ hotelId }) => {
           </div>
 
           {/* Parse Preview */}
+          {parseResult && assessment && !assessment.ok && (
+            <div className="bg-red-50 border-2 border-red-300 rounded-2xl p-5 flex gap-3">
+              <AlertTriangle size={20} className="text-red-700 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <h4 className="text-sm font-bold font-display text-red-900">
+                  This file was not imported
+                </h4>
+                <p className="text-sm text-red-800 leading-relaxed">{assessment.reason}</p>
+                <p className="text-xs text-red-700/80 pt-1">
+                  The existing guest list has not been changed.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {parseResult && assessment && assessment.ok && assessment.warnings.length > 0 && (
+            <div className="bg-amber-50 border border-amber-300 rounded-2xl p-5 flex gap-3">
+              <AlertTriangle size={20} className="text-amber-700 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <h4 className="text-sm font-bold font-display text-amber-900">
+                  Check before syncing
+                </h4>
+                <ul className="text-sm text-amber-800 leading-relaxed list-disc pl-5 space-y-0.5">
+                  {assessment.warnings.map((w, i) => (
+                    <li key={i}>{w}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
+
           {parseResult && (
             <div className="bg-white border border-border rounded-2xl p-6 shadow-luxury space-y-5">
               <div className="flex items-center justify-between border-b border-border pb-3">
@@ -322,7 +242,7 @@ export const ReportUploader: React.FC<ReportUploaderProps> = ({ hotelId }) => {
 
                 <button
                   onClick={handleSyncToDatabase}
-                  disabled={uploading}
+                  disabled={uploading || (assessment ? !assessment.ok : false)}
                   className="px-5 py-2.5 rounded-xl bg-white border border-black/20 text-black font-mono-custom font-bold text-xs shadow-xs flex items-center gap-2 hover:bg-[#F2EBE4] transition-all cursor-pointer"
                 >
                   <Database size={15} className="text-black" />
@@ -336,8 +256,17 @@ export const ReportUploader: React.FC<ReportUploaderProps> = ({ hotelId }) => {
                   <p className="text-xl font-bold font-display text-foreground mt-0.5">{parseResult.stats.totalRooms}</p>
                 </div>
                 <div className="stat-card-luxury p-3.5">
-                  <span className="label-mono text-accent">Breakfast Pax</span>
-                  <p className="text-xl font-bold font-display text-accent mt-0.5">{parseResult.stats.totalBreakfastPax}</p>
+                  <span className="label-mono text-accent">Breakfast Included</span>
+                  <p className="text-xl font-bold font-display text-accent mt-0.5">{parseResult.stats.breakfastIncludedPax}</p>
+                </div>
+                <div className="stat-card-luxury p-3.5">
+                  <span className="label-mono text-amber-700">Needs Checking</span>
+                  <p className="text-xl font-bold font-display text-amber-800 mt-0.5">{parseResult.stats.breakfastUnverifiedPax}</p>
+                  {parseResult.stats.breakfastUnverifiedCodes.length > 0 && (
+                    <p className="text-[10px] text-muted-foreground mt-1 font-mono-custom break-words">
+                      {parseResult.stats.breakfastUnverifiedCodes.join(', ')}
+                    </p>
+                  )}
                 </div>
                 <div className="stat-card-luxury p-3.5">
                   <span className="label-mono text-indigo-700">Dinner Pax</span>
@@ -350,8 +279,7 @@ export const ReportUploader: React.FC<ReportUploaderProps> = ({ hotelId }) => {
               </div>
             </div>
           )}
-        </div>
-      )}
+      </div>
     </div>
   );
 };

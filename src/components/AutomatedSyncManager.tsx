@@ -1,26 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { db, collection, getDocs } from '../firebase';
 import { seedHistoricalData, deleteSyntheticHistoricalData, SeedHistoricalResult } from '../lib/historicalSeeder';
-import { triggerDailyAutomatedSync, AutomatedSyncResult } from '../lib/operaSyncService';
 import { DailySummary } from '../types';
 import { BulkFolderUploader } from './BulkFolderUploader';
-import { 
-  Zap, 
-  History, 
-  Calendar, 
-  CheckCircle, 
-  Clock, 
-  Database, 
-  Server, 
-  Copy, 
-  Check, 
+import {
+  Zap,
+  History,
+  Calendar,
+  CheckCircle,
+  Clock,
+  Database,
+  Server,
+  Check,
   ArrowRight,
-  TrendingUp,
-  Coffee,
-  Moon,
-  AlertCircle,
   FolderUp,
-  FileSpreadsheet,
   Trash2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -34,9 +27,6 @@ export const AutomatedSyncManager: React.FC<AutomatedSyncManagerProps> = ({ hote
   const [activeSubTab, setActiveSubTab] = useState<'bulk_folder' | 'automated_sync' | 'historical_backfill' | 'summaries_explorer'>('bulk_folder');
   
   // Daily Sync State
-  const [syncingDaily, setSyncingDaily] = useState(false);
-  const [dailySyncResult, setDailySyncResult] = useState<AutomatedSyncResult | null>(null);
-  const [copiedWebhook, setCopiedWebhook] = useState(false);
 
   // Historical Seeder State
   const [selectedDaysCount, setSelectedDaysCount] = useState<number>(30);
@@ -71,19 +61,6 @@ export const AutomatedSyncManager: React.FC<AutomatedSyncManagerProps> = ({ hote
       console.warn('Error fetching daily summaries:', err);
     } finally {
       setLoadingSummaries(false);
-    }
-  };
-
-  const handleRunDailySync = async () => {
-    setSyncingDaily(true);
-    setDailySyncResult(null);
-    try {
-      const res = await triggerDailyAutomatedSync();
-      setDailySyncResult(res);
-    } catch (err: any) {
-      alert(`Daily sync simulation failed: ${err.message}`);
-    } finally {
-      setSyncingDaily(false);
     }
   };
 
@@ -137,13 +114,6 @@ export const AutomatedSyncManager: React.FC<AutomatedSyncManagerProps> = ({ hote
     } finally {
       setClearingSynthetic(false);
     }
-  };
-
-  const handleCopyWebhook = () => {
-    const curlCommand = `curl -X POST "${window.location.origin}/api/ingest/opera?hotelId=both" \\\n  -H "Content-Type: text/plain" \\\n  -H "X-Opera-Api-Key: accor-night-audit-key-2026" \\\n  --data-binary @opera_daily_export.tsv`;
-    navigator.clipboard.writeText(curlCommand);
-    setCopiedWebhook(true);
-    setTimeout(() => setCopiedWebhook(false), 2500);
   };
 
   return (
@@ -217,12 +187,11 @@ export const AutomatedSyncManager: React.FC<AutomatedSyncManagerProps> = ({ hote
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-mono-custom font-bold uppercase bg-emerald-100 text-emerald-800 border border-emerald-300">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
-                    Automated Sync Active
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-mono-custom font-bold uppercase bg-amber-100 text-amber-800 border border-amber-300">
+                    Not automated yet
                   </span>
                   <span className="text-xs text-muted-foreground">•</span>
-                  <span className="font-mono-custom text-xs font-semibold text-muted-foreground">CRON @ 05:00 AM (UTC+7)</span>
+                  <span className="font-mono-custom text-xs font-semibold text-muted-foreground">Imports are manual</span>
                 </div>
                 <h3 className="text-xl font-bold font-display text-foreground mt-2 tracking-tight">
                   Daily Night Audit Ingestion Gateway
@@ -232,14 +201,6 @@ export const AutomatedSyncManager: React.FC<AutomatedSyncManagerProps> = ({ hote
                 </p>
               </div>
 
-              <button
-                onClick={handleRunDailySync}
-                disabled={syncingDaily}
-                className="px-5 py-2.5 rounded-xl bg-black text-white font-mono-custom font-bold text-xs shadow-xs flex items-center gap-2 hover:bg-black/85 transition-all cursor-pointer shrink-0 disabled:opacity-50"
-              >
-                <Zap size={14} className="text-amber-400" />
-                {syncingDaily ? 'Running Morning Sync...' : 'Trigger Daily Sync Now'}
-              </button>
             </div>
 
             {/* Ingestion Channels */}
@@ -277,66 +238,7 @@ export const AutomatedSyncManager: React.FC<AutomatedSyncManagerProps> = ({ hote
           </div>
 
           {/* Daily Sync Result Notice */}
-          <AnimatePresence>
-            {dailySyncResult && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="p-5 rounded-2xl border border-emerald-500/30 bg-emerald-50 text-emerald-900 shadow-sm space-y-2"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 font-mono-custom font-bold text-xs">
-                    <CheckCircle size={16} className="text-emerald-600" />
-                    <span>{dailySyncResult.message}</span>
-                  </div>
-                  <span className="text-[10px] font-mono-custom text-emerald-700">{new Date(dailySyncResult.timestamp).toLocaleTimeString()}</span>
-                </div>
-                <div className="flex gap-4 text-xs font-mono-custom text-emerald-800 pt-1">
-                  <span>Rooms Synced: <strong>{dailySyncResult.roomsImported}</strong></span>
-                  <span>Forecast Days: <strong>{dailySyncResult.forecastDaysImported}</strong></span>
-                  <span>Source: <strong>{dailySyncResult.source}</strong></span>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
 
-          {/* Webhook & SFTP Integration Guide */}
-          <div className="bg-white rounded-2xl p-6 border border-border shadow-luxury space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h4 className="text-base font-bold font-display text-foreground">
-                  Opera Automation Ingest Webhook (cURL & Scripting)
-                </h4>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Configure your hotel's Night Audit scheduler or SFTP script to POST exports directly to this endpoint.
-                </p>
-              </div>
-
-              <button
-                onClick={handleCopyWebhook}
-                className="px-3.5 py-2 rounded-xl border border-border bg-white hover:bg-[#F2EBE4]/60 text-xs font-mono-custom font-medium flex items-center gap-2 shadow-xs transition-all cursor-pointer"
-              >
-                {copiedWebhook ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} className="text-accent" />}
-                <span>{copiedWebhook ? 'Copied to Clipboard' : 'Copy cURL Command'}</span>
-              </button>
-            </div>
-
-            <div className="bg-slate-900 text-slate-100 rounded-xl p-4 font-mono text-xs overflow-x-auto">
-              <pre className="leading-relaxed">
-{`# Automated Opera Night Audit Script (Cron / Webhook Ingestion)
-curl -X POST "${window.location.origin}/api/ingest/opera?hotelId=both" \\
-  -H "Content-Type: text/plain" \\
-  -H "X-Opera-Api-Key: accor-night-audit-key-2026" \\
-  --data-binary @opera_daily_export.tsv`}
-              </pre>
-            </div>
-
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <AlertCircle size={14} className="text-accent shrink-0" />
-              <span>Multi-property exports will be automatically parsed into Novotel Food Exchange and ibis Delhi Street schemas with real-time audit trail logs.</span>
-            </div>
-          </div>
         </div>
       )}
 

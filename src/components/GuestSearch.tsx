@@ -313,7 +313,9 @@ export const GuestSearch: React.FC<GuestSearchProps> = ({
           {filteredGuests.map((guest) => {
           const checkIn = checkIns[guest.roomNumber];
           const isCheckedIn = Boolean(checkIn);
-          const totalOccupants = (guest.adults || 1) + (guest.children || 0);
+          // `guest.adults || 1` used to sit here, showing one occupant for a room the export
+          // says has none, and offering a stepper for a guest who is not on the reservation.
+          const totalOccupants = (guest.adults ?? 0) + (guest.children ?? 0);
           const isPartial = Boolean(checkIn && (checkIn.adultsAte + checkIn.childrenAte) < totalOccupants);
           const isEntitled = hasMealEntitlement(guest.mealPlan, activeMealService);
           const vip = VIP_LEVELS.find((v) => v.level === guest.vipLevel || v.level === guest.vipStatus);

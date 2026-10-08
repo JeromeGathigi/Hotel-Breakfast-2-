@@ -2,5 +2,5 @@
   "name": "Hotel Breakfast Guest Checker",
   "description": "Hotel breakfast host stand guest meal checker with Opera PMS report parsing, guest search, check-in, and analytics.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": []
 }

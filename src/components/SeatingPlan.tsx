@@ -6,7 +6,7 @@ import {
   getDocs,
   onSnapshot, 
   doc, 
-  setDoc, 
+  setDoc,
   updateDoc, 
   deleteDoc, 
   writeBatch,
@@ -16,6 +16,8 @@ import { DiningTable, MealServiceType, Guest, TableLayout, TableLayoutEntry } fr
 import { DEFAULT_NOVOTEL_TABLES, DEFAULT_IBIS_TABLES } from '../constants';
 import { TableCardSkeleton } from './Skeleton';
 import { RestaurantFloorPlan2D } from './RestaurantFloorPlan2D';
+import { Banner } from './ui';
+import { buildMergePlan, buildUnmergePlan, getMergedGroupMembers } from '../lib/tables';
 import { 
   getOccupiedDurationMinutes, 
   getTurnoverStage, 
@@ -66,7 +68,15 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
   const [searchGuestRoom, setSearchGuestRoom] = useState('');
   const [inHouseGuests, setInHouseGuests] = useState<Guest[]>([]);
   const [assignModalOpen, setAssignModalOpen] = useState(false);
-  const [assignPax, setAssignPax] = useState<number>(2);
+  const [assignPax, setAssignPax] = useState<number>(0);
+  // Every action on this screen used to fail into console.error only. A host whose seating was
+  // refused saw nothing happen and tapped again.
+  const [actionError, setActionError] = useState<string | null>(null);
+  const report = (what: string, err: unknown) => {
+    console.error(what, err);
+    setActionError(`${what}: ${(err as Error)?.message || 'unknown error'}`);
+  };
+  const [emptyPlan, setEmptyPlan] = useState(false);
 
   // Turnover Visualization Layer toggle
   const [showTurnoverLayer, setShowTurnoverLayer] = useState<boolean>(() => {
@@ -121,13 +131,12 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
     const unsub = onSnapshot(
       tablesRef,
       (snapshot) => {
+        // An empty plan used to be "fixed" by writing the default tables into Firestore from
+        // whichever browser happened to open this screen - unawaited, unhandled, and for any
+        // user. Creating the plan is now an explicit administrator action.
+        setEmptyPlan(snapshot.empty);
         if (snapshot.empty) {
-          // Initialize with default tables
-          const defaults = hotelId === 'ibis' ? DEFAULT_IBIS_TABLES : DEFAULT_NOVOTEL_TABLES;
-          defaults.forEach((t) => {
-            setDoc(doc(db, 'hotels', hotelId, 'tables', t.id), t);
-          });
-          setTables(defaults);
+          setTables([]);
         } else {
           const list = snapshot.docs.map((d: any) => ({ id: d.id, ...d.data() } as DiningTable));
           list.sort((a: any, b: any) => a.tableNumber.localeCompare(b.tableNumber, undefined, { numeric: true }));
@@ -136,17 +145,21 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
         setLoading(false);
       },
       (err: any) => {
-        console.warn('Seating plan listener notice:', err);
+        report('The floor plan could not be read', err);
         setLoading(false);
       }
     );
 
     // Subscribe to in-house guests for table assignment lookup
     const guestsRef = collection(db, 'hotels', hotelId, 'guests');
-    const unsubGuests = onSnapshot(guestsRef, (snap: any) => {
-      const gList = snap.docs.map((d: any) => d.data() as Guest);
-      setInHouseGuests(gList);
-    });
+    const unsubGuests = onSnapshot(
+      guestsRef,
+      (snap: any) => {
+        const gList = snap.docs.map((d: any) => d.data() as Guest);
+        setInHouseGuests(gList);
+      },
+      (err: any) => report('The guest list could not be read', err)
+    );
 
     return () => {
       unsub();
@@ -157,52 +170,24 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
   // 2. Subscribe to Saved Named Layouts (Stage 11) & Seed Baseline if empty
   useEffect(() => {
     const layoutsRef = collection(db, 'hotels', hotelId, 'layouts');
-    const unsubLayouts = onSnapshot(layoutsRef, async (snap: any) => {
-      if (snap.empty) {
-        // Seed baseline "Architect's plan"
-        const defaults = hotelId === 'ibis' ? DEFAULT_IBIS_TABLES : DEFAULT_NOVOTEL_TABLES;
-        const baselineEntries: TableLayoutEntry[] = defaults.map((t) => ({
-          id: t.id,
-          tableNumber: t.tableNumber,
-          capacity: t.capacity,
-          zone: t.zone,
-          x: t.x ?? 100,
-          y: t.y ?? 100,
-          shape: t.shape,
-          isSmoking: t.isSmoking,
-        }));
-
-        const baselineLayout: TableLayout = {
-          id: 'layout-architects-plan',
-          name: "Architect's plan",
-          tables: baselineEntries,
-          isActive: true,
-          createdByUid: currentUser?.uid || 'system',
-          createdByEmail: currentUser?.email || 'admin@accor.com',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-
-        try {
-          await setDoc(doc(db, 'hotels', hotelId, 'layouts', baselineLayout.id), baselineLayout);
-          setLayouts([baselineLayout]);
-        } catch (e) {
-          console.warn('Could not seed baseline layout:', e);
-        }
-      } else {
+    const unsubLayouts = onSnapshot(
+      layoutsRef,
+      (snap: any) => {
+        // Seeding an "Architect's plan" layout from the browser on first view is gone, for the same
+        // reason as the tables above; "Create the default floor plan" writes both.
         const list = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as TableLayout));
-        // Sort active first, then alphabetically
         list.sort((a: TableLayout, b: TableLayout) => {
           if (a.isActive && !b.isActive) return -1;
           if (!a.isActive && b.isActive) return 1;
           return a.name.localeCompare(b.name);
         });
         setLayouts(list);
-      }
-    });
+      },
+      (err: any) => report('Saved layouts could not be read', err)
+    );
 
     return () => unsubLayouts();
-  }, [hotelId, currentUser]);
+  }, [hotelId]);
 
   const activeLayout = useMemo(() => {
     return layouts.find((l) => l.isActive) || null;
@@ -232,7 +217,7 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
   const reservedCount = tables.filter((t) => t.status === 'reserved').length;
   const cleaningCount = tables.filter((t) => t.status === 'cleaning').length;
   const totalCapacity = tables.reduce((acc, t) => acc + t.capacity, 0);
-  const occupiedCovers = tables.filter((t) => t.status === 'occupied').reduce((acc, t) => acc + (t.occupiedPax || t.capacity), 0);
+  const occupiedCovers = tables.filter((t) => t.status === 'occupied').reduce((acc, t) => acc + (Number(t.occupiedPax) || 0), 0);
 
   const handleUpdateStatus = async (table: DiningTable, newStatus: DiningTable['status']) => {
     try {
@@ -259,7 +244,7 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
         setSelectedTable((prev) => (prev ? { ...prev, status: newStatus } : null));
       }
     } catch (err) {
-      console.error('Failed to update table status:', err);
+      report('Could not change the table status', err);
     }
   };
 
@@ -279,18 +264,32 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
       if (!confirmedSmoking) return;
     }
 
-    try {
-      const tableRef = doc(db, 'hotels', hotelId, 'tables', selectedTable.id);
-      const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    if (selectedTable.status === 'occupied' && selectedTable.occupiedByRoom && selectedTable.occupiedByRoom !== guest.roomNumber) {
+      setActionError(`Table ${selectedTable.tableNumber} is occupied by room ${selectedTable.occupiedByRoom}. Clear it first.`);
+      return;
+    }
+    if (assignPax < 1) {
+      setActionError('Choose how many guests are being seated.');
+      return;
+    }
 
-      await updateDoc(tableRef, {
+    try {
+      // occupiedPax used to fall back to `guest.adults || 2` - two invented covers when nothing was
+      // chosen. occupiedSince is an instant now, not "07:42" in the device's locale.
+      const occupancy = {
         status: 'occupied',
         occupiedByRoom: guest.roomNumber,
         occupiedByGuest: guest.guestName,
-        occupiedPax: assignPax || guest.adults || 2,
-        occupiedSince: nowTime,
+        occupiedPax: assignPax,
+        occupiedSince: new Date().toISOString(),
         mealService: activeMealService,
-      });
+      };
+      const batch = writeBatch(db);
+      for (const member of getMergedGroupMembers(selectedTable, tables)) {
+        batch.update(doc(db, 'hotels', hotelId, 'tables', member.id), occupancy);
+      }
+      await batch.commit();
+      setActionError(null);
 
       await logOperaAuditTrail(
         hotelId,
@@ -305,24 +304,33 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
       setSelectedTable(null);
       setSearchGuestRoom('');
     } catch (err) {
-      console.error('Failed to seat guest:', err);
+      report('Could not seat the guest', err);
     }
   };
 
   const handleSaveTableLayout = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingTable?.tableNumber || !editingTable.capacity) return;
+    const capacity = Number(editingTable?.capacity);
+    if (!editingTable?.tableNumber?.trim()) {
+      setActionError('Give the table a number.');
+      return;
+    }
+    if (!Number.isInteger(capacity) || capacity < 1) {
+      setActionError('Seats must be a whole number of at least 1.');
+      return;
+    }
 
     try {
       const tableId = editingTable.id || `table-${Date.now()}`;
       const newTable: DiningTable = {
         id: tableId,
         tableNumber: editingTable.tableNumber.trim().toUpperCase(),
-        capacity: Number(editingTable.capacity) || 4,
+        capacity,
         zone: (editingTable.zone as any) || (hotelId === 'ibis' ? 'Delhi Street' : 'Main Dining'),
         status: (editingTable.status as any) || 'available',
-        x: editingTable.x || 40,
-        y: editingTable.y || 40,
+        // 0 is a valid coordinate; `|| 40` used to move a table at the edge.
+        x: editingTable.x ?? 40,
+        y: editingTable.y ?? 40,
         shape: (editingTable.shape as any) || 'square',
         isSmoking: Boolean(editingTable.isSmoking),
       };
@@ -337,7 +345,7 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
 
       setEditingTable(null);
     } catch (err) {
-      console.error('Failed to save table:', err);
+      report('Could not save the table', err);
     }
   };
 
@@ -348,7 +356,7 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
       await logOperaAuditTrail(hotelId, 'TABLE_LAYOUT_UPDATE', `Removed Table ${tableNum} from seating plan`);
       if (selectedTable?.id === tableId) setSelectedTable(null);
     } catch (err) {
-      console.error('Failed to delete table:', err);
+      report('Could not delete the table', err);
     }
   };
 
@@ -432,10 +440,10 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
       await logOperaAuditTrail(
         hotelId,
         'TABLE_LAYOUT_UPDATE',
-        `Applied layout "${targetLayout.name}" (${targetLayout.tables.length} tables) by ${currentUser?.email || 'admin'}`
+        `Applied layout "${targetLayout.name}" (${targetLayout.tables.length} tables)`
       );
     } catch (err) {
-      console.error('Failed to apply layout:', err);
+      report('Could not apply the layout', err);
     }
   };
 
@@ -467,8 +475,8 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
         name,
         tables: layoutEntries,
         isActive: true,
-        createdByUid: currentUser?.uid || 'admin',
-        createdByEmail: currentUser?.email || 'admin@accor.com',
+        createdByUid: currentUser?.uid ?? '',
+        createdByEmail: currentUser?.email ?? '',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -493,7 +501,7 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
       setNewLayoutName('');
       setSaveLayoutModalOpen(false);
     } catch (err) {
-      console.error('Failed to save layout:', err);
+      report('Could not save the layout', err);
     } finally {
       setIsSavingLayout(false);
     }
@@ -529,7 +537,7 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
         `Updated layout "${layout.name}" with current ${tables.length} table positions`
       );
     } catch (err) {
-      console.error('Failed to update layout:', err);
+      report('Could not update the layout', err);
     }
   };
 
@@ -547,7 +555,7 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
         `Deleted layout "${layout.name}"`
       );
     } catch (err) {
-      console.error('Failed to delete layout:', err);
+      report('Could not delete the layout', err);
     }
   };
 
@@ -573,7 +581,7 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
         `Repositioned tables on 2D blueprint (${updatedTables.length} tables updated)`
       );
     } catch (err) {
-      console.error('Failed to save table positions:', err);
+      report('Could not save the table positions', err);
       throw err;
     }
   };
@@ -636,8 +644,8 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
         name: "Architect's plan",
         tables: baselineEntries,
         isActive: true,
-        createdByUid: currentUser?.uid || 'system',
-        createdByEmail: currentUser?.email || 'admin@accor.com',
+        createdByUid: currentUser?.uid ?? '',
+        createdByEmail: currentUser?.email ?? '',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -658,7 +666,59 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
       setResetModalOpen(false);
       setIsEditLayoutOpen(false);
     } catch (err) {
-      console.error('Failed to reset layout:', err);
+      report('Could not reset the floor plan', err);
+    }
+  };
+
+  /** Merging is a host action during service: it changes only mergedInto / mergedTables. */
+  const handleMergeTables = async (tablesToMerge: DiningTable[]) => {
+    const plan = buildMergePlan(tablesToMerge, tables);
+    if (!plan.valid) throw new Error(plan.reason || 'These tables cannot be merged.');
+    const batch = writeBatch(db);
+    for (const [id, update] of Object.entries(plan.updates)) batch.update(doc(db, 'hotels', hotelId, 'tables', id), update);
+    await batch.commit();
+    await logOperaAuditTrail(hotelId, 'TABLE_LAYOUT_UPDATE', `Merged tables ${plan.updatedTables.map((t) => t.tableNumber).join('+')}`);
+  };
+
+  const handleUnmergeTable = async (table: DiningTable) => {
+    const plan = buildUnmergePlan(table, tables);
+    if (!plan.valid) {
+      setActionError(plan.reason || 'This table is not merged.');
+      return;
+    }
+    try {
+      const batch = writeBatch(db);
+      for (const [id, update] of Object.entries(plan.updates)) batch.update(doc(db, 'hotels', hotelId, 'tables', id), update);
+      await batch.commit();
+      setActionError(null);
+      await logOperaAuditTrail(hotelId, 'TABLE_LAYOUT_UPDATE', `Separated merged tables ${plan.updatedTables.map((t) => t.tableNumber).join(', ')}`);
+    } catch (err) {
+      report('Could not separate the tables', err);
+    }
+  };
+
+  /** Writes the architect's default plan for an empty property - an explicit administrator action. */
+  const handleCreateDefaultPlan = async () => {
+    const defaults = hotelId === 'ibis' ? DEFAULT_IBIS_TABLES : DEFAULT_NOVOTEL_TABLES;
+    try {
+      const batch = writeBatch(db);
+      defaults.forEach((t) => batch.set(doc(db, 'hotels', hotelId, 'tables', t.id), t));
+      const now = new Date().toISOString();
+      batch.set(doc(db, 'hotels', hotelId, 'layouts', 'layout-architects-plan'), {
+        id: 'layout-architects-plan',
+        name: "Architect's plan",
+        tables: defaults.map((t) => ({ id: t.id, tableNumber: t.tableNumber, capacity: t.capacity, zone: t.zone, x: t.x ?? 0, y: t.y ?? 0, shape: t.shape ?? null, isSmoking: Boolean(t.isSmoking) })),
+        isActive: true,
+        createdByUid: currentUser?.uid ?? '',
+        createdByEmail: currentUser?.email ?? '',
+        createdAt: now,
+        updatedAt: now,
+      });
+      await batch.commit();
+      setActionError(null);
+      await logOperaAuditTrail(hotelId, 'TABLE_LAYOUT_UPDATE', `Created the default floor plan (${defaults.length} tables)`);
+    } catch (err) {
+      report('Could not create the floor plan', err);
     }
   };
 
@@ -670,6 +730,36 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
 
   return (
     <div className="space-y-6">
+      {actionError && (
+        <Banner
+          tone="critical"
+          role="alert"
+          action={
+            <button className="h-11 px-3 rounded-xl border border-red-300 bg-white text-sm font-bold cursor-pointer" onClick={() => setActionError(null)}>
+              Dismiss
+            </button>
+          }
+        >
+          {actionError}
+        </Banner>
+      )}
+      {!loading && emptyPlan && (
+        <Banner
+          tone="info"
+          title="No floor plan for this property yet"
+          action={
+            isAdmin ? (
+              <button className="h-11 px-4 rounded-xl bg-white border border-black/15 text-sm font-bold cursor-pointer" onClick={handleCreateDefaultPlan}>
+                Create the default floor plan
+              </button>
+            ) : undefined
+          }
+        >
+          {isAdmin
+            ? "Creates the architect's table plan. Seats per table are provisional (4) until the restaurant confirms them."
+            : 'Ask an administrator to create it.'}
+        </Banner>
+      )}
       {/* Header & Host Stand Controls */}
       <div className="bg-white rounded-2xl p-6 border border-border shadow-luxury">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -919,6 +1009,8 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
           onQuickSeat={(table) => handleQuickSeat(table)}
           onUpdateStatus={(table, status) => handleUpdateStatus(table, status)}
           onBatchUpdatePositions={handleBatchUpdatePositions}
+          onMergeTables={handleMergeTables}
+          onUnmergeTable={handleUnmergeTable}
         />
       ) : filteredTables.length === 0 ? (
         <div className="bg-white rounded-2xl p-12 border border-border text-center shadow-luxury">
@@ -1076,6 +1168,15 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
                 </button>
               </div>
 
+              {(selectedTable.mergedInto || (selectedTable.mergedTables?.length ?? 0) > 0) && (
+                <button
+                  onClick={() => handleUnmergeTable(selectedTable)}
+                  className="w-full h-11 rounded-xl border border-black/20 bg-white text-sm font-bold cursor-pointer"
+                >
+                  Separate merged tables
+                </button>
+              )}
+
               {/* Status Selector */}
               <div className="space-y-2">
                 <p className="label-mono">Change Table Status</p>
@@ -1219,7 +1320,9 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
               <div className="flex items-start justify-between border-b border-border pb-3">
                 <div>
                   <h3 className="text-xl font-bold font-display text-foreground">Seat Guest at Table {selectedTable.tableNumber}</h3>
-                  <p className="text-xs text-muted-foreground">Select an in-house room to seat</p>
+                  <p className="text-xs text-muted-foreground">
+                    Select an in-house room to seat. Seating does not record breakfast attendance - use Check-in for that.
+                  </p>
                 </div>
                 <button
                   onClick={() => setAssignModalOpen(false)}
@@ -1444,7 +1547,11 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
                         <tr key={t.id} className="hover:bg-[#F2EBE4]/30">
                           <td className="p-3 font-mono-custom font-bold text-foreground flex items-center gap-1.5">
                             {t.tableNumber}
-                            {t.isSmoking && <Cigarette size={12} className="text-cyan-700" title="Smoking" />}
+                            {t.isSmoking && (
+                              <span title="Smoking" aria-label="Smoking">
+                                <Cigarette size={12} className="text-cyan-700" />
+                              </span>
+                            )}
                           </td>
                           <td className="p-3 text-muted-foreground">{t.zone}</td>
                           <td className="p-3 text-muted-foreground capitalize font-mono-custom text-[11px]">{t.shape || 'Standard'}</td>

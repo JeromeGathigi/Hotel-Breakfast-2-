@@ -13,7 +13,8 @@ import {
   X, 
   CheckCheck, 
   Search, 
-  Check
+  Check,
+  AlertTriangle,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -36,6 +37,8 @@ export const BatchCheckInModal: React.FC<BatchCheckInModalProps> = ({
   const [filterGroup, setFilterGroup] = useState<string>('all');
   const [search, setSearch] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [skippedRooms, setSkippedRooms] = useState<string[]>([]);
 
   // Group by Tour / Company if available
   const tourGroups = Array.from(
@@ -78,6 +81,8 @@ export const BatchCheckInModal: React.FC<BatchCheckInModalProps> = ({
   const handleExecuteBatchCheckIn = async () => {
     if (selectedRooms.size === 0) return;
     setSubmitting(true);
+    setErrorMessage(null);
+    setSkippedRooms([]);
     const today = businessDate();
     const currentUser = auth.currentUser;
     const recordedBy = currentUser?.email || 'staff@novotel-chiangmai.com';
@@ -85,10 +90,24 @@ export const BatchCheckInModal: React.FC<BatchCheckInModalProps> = ({
     try {
       const selectedGuestList = guests.filter((g) => selectedRooms.has(g.roomNumber));
       let totalPax = 0;
+      const skipped: string[] = [];
 
       for (const guest of selectedGuestList) {
-        const adults = guest.adults || 1;
-        const children = guest.children || 0;
+        // `guest.adults || 1` used to sit here. For a room the export says has NO adults -
+        // room 108 on the real Novotel export is one - that wrote adultsAte: 1 to Firestore,
+        // inventing a guest who does not exist and carrying them into every covers total
+        // built on check-ins. The same defect was removed from the duplicate parser in
+        // functions/ once already; use the real figure.
+        const adults = guest.adults ?? 0;
+        const children = guest.children ?? 0;
+
+        // A check-in recording nobody is meaningless, and writing it would make the room look
+        // served. Skip it and say so, rather than fabricating one cover to make it non-empty.
+        if (adults + children === 0) {
+          skipped.push(guest.roomNumber);
+          continue;
+        }
+
         totalPax += adults + children;
 
         const checkInDoc = {
@@ -117,10 +136,20 @@ export const BatchCheckInModal: React.FC<BatchCheckInModalProps> = ({
         { roomCount: selectedRooms.size, totalPax, mealService: activeMealService }
       );
 
+      setSkippedRooms(skipped);
+
       if (onSuccess) onSuccess();
-      onClose();
+      // Keep the modal open when rooms were skipped, so the host actually reads why.
+      if (skipped.length === 0) onClose();
     } catch (err) {
+      // The Firestore write wrappers reject now rather than silently resolving, so this is a
+      // real failure. It has to reach the host: at a restaurant door nobody reads a console,
+      // and a silent no-op just gets tapped again.
       console.error('Batch check in failed:', err);
+      setErrorMessage(
+        `Could not save the check-in: ${(err as Error)?.message || 'unknown error'}. ` +
+          `Nothing was recorded for these rooms. Check the connection and try again.`
+      );
     } finally {
       setSubmitting(false);
     }
@@ -245,6 +274,35 @@ export const BatchCheckInModal: React.FC<BatchCheckInModalProps> = ({
             <p className="text-center py-10 text-xs text-muted-foreground italic font-mono-custom">No rooms match filter.</p>
           )}
         </div>
+
+        {/* A failed write used to be console-only. At a door nobody reads a console. */}
+        {errorMessage && (
+          <div
+            role="alert"
+            className="p-3 rounded-xl bg-rose-50 border border-rose-300 text-rose-900 text-xs flex items-start gap-2"
+          >
+            <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+            <span>{errorMessage}</span>
+          </div>
+        )}
+
+        {/* Rooms the export says have no occupants. Previously each was silently recorded as
+            one adult, which made the room look served. */}
+        {skippedRooms.length > 0 && (
+          <div
+            role="status"
+            className="p-3 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-xs flex items-start gap-2"
+          >
+            <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+            <span>
+              Not checked in: room{skippedRooms.length > 1 ? 's' : ''}{' '}
+              <strong>{skippedRooms.join(', ')}</strong>. Opera lists no adults or children on
+              {skippedRooms.length > 1 ? ' these reservations' : ' this reservation'}, so there is
+              nobody to record. Check the room in Opera, or check the guest in individually and
+              enter the real headcount.
+            </span>
+          </div>
+        )}
 
         {/* Action Button */}
         <div className="pt-3 border-t border-border flex items-center justify-between">

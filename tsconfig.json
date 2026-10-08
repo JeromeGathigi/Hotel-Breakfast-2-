@@ -22,5 +22,26 @@
     },
     "allowImportingTsExtensions": true,
     "noEmit": true
-  }
+  },
+  "include": [
+    "src",
+    "scripts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "functions",
+    "lib",
+    "src/parsing/__fixtures__/sampleData.ts",
+    "src/lib/excelFolderParser.ts",
+    "src/components/BulkFolderUploader.tsx",
+    "src/lib/historicalSeeder.ts",
+    "src/components/AutomatedSyncManager.tsx",
+    "src/components/DataQualityModal.tsx",
+    "src/components/GuestSearch.tsx",
+    "src/components/CheckInModal.tsx",
+    "src/components/BatchCheckInModal.tsx",
+    "src/components/ReportUploader.tsx",
+    "src/components/OperaAuditModal.tsx"
+  ]
 }

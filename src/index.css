@@ -1,23 +1,38 @@
 @import "tailwindcss";
 
-@font-face {
-  font-family: "Claimcheck";
-  src: url("https://db.onlinewebfonts.com/t/34c9c22d713c72dc899b646cba7f0931.woff2") format("woff2"),
-       url("https://db.onlinewebfonts.com/t/34c9c22d713c72dc899b646cba7f0931.woff") format("woff"),
-       url("https://db.onlinewebfonts.com/t/34c9c22d713c72dc899b646cba7f0931.ttf") format("truetype");
-  font-weight: normal;
-  font-style: normal;
-  font-display: swap;
+/*
+ * Tailwind 4 generates a utility only for tokens declared in @theme. The variables below were
+ * defined in :root but never registered, so every `bg-accent`, `text-accent`,
+ * `text-muted-foreground`, `border-border`, `shadow-luxury` and their siblings - about 800 uses
+ * across the app - produced no CSS at all. The visible symptom: "Sign in with Accor Account" was
+ * white text on a transparent background, i.e. invisible.
+ *
+ * `inline` makes each utility reference the variable itself, so `.theme-ibis` overriding --accent
+ * re-colours every accent utility for ibis without a second set of classes.
+ */
+@theme inline {
+  --color-background: var(--bg);
+  --color-foreground: var(--ink);
+  --color-card: var(--card-bg);
+  --color-card-foreground: var(--ink);
+  --color-muted-foreground: var(--ink-muted);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-border: var(--border);
+  --color-on-primary: var(--on-primary);
+  --shadow-luxury: var(--shadow);
 }
 
-@font-face {
-  font-family: "Numbers-Claimcheck";
-  src: url("https://db.onlinewebfonts.com/t/34c9c22d713c72dc899b646cba7f0931.woff2") format("woff2"),
-       url("https://db.onlinewebfonts.com/t/34c9c22d713c72dc899b646cba7f0931.woff") format("woff");
-  font-weight: normal;
-  font-style: normal;
-  font-display: swap;
-}
+/*
+ * Two @font-face blocks for "Claimcheck" and "Numbers-Claimcheck" were removed here. Both
+ * pointed at the SAME file on db.onlinewebfonts.com (identical hash), and neither has ever
+ * loaded: font files require CORS, and that host sends no Access-Control-Allow-Origin. The
+ * browser console showed three blocked requests per page load - woff2, woff and ttf - from
+ * any origin, production included.
+ *
+ * Nothing changes visually. The next family in the stack, Chivo Mono, is already served from
+ * Google Fonts and is what the app has actually been rendering all along.
+ */
 
 @layer base {
   * {
@@ -27,8 +42,8 @@
 
   :root {
     --font-sans: 'Rokkitt', serif;
-    --font-mono: 'Claimcheck', 'Numbers-Claimcheck', 'Numbers Claimcheck', 'Chivo Mono', 'Geist Mono', monospace;
-    --font-number: 'Claimcheck', 'Numbers-Claimcheck', 'Numbers Claimcheck', 'Chivo Mono', 'Geist Mono', monospace;
+    --font-mono: 'Chivo Mono', 'Geist Mono', ui-monospace, monospace;
+    --font-number: 'Chivo Mono', 'Geist Mono', ui-monospace, monospace;
     --font-display: 'Ubuntu', sans-serif;
 
     /* Novotel Design Archetype: Sand/Nude Canvas & Deep Corporate Navy */
@@ -207,4 +222,18 @@
 }
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(10, 22, 43, 0.3);
+}
+
+/* Spec section 5: VIP 2 and 3 get a gold shimmer. Off for anyone who asks the OS for less motion. */
+@keyframes vip-shimmer {
+  0% { background-position: -150% 0; }
+  100% { background-position: 250% 0; }
+}
+.vip-shimmer {
+  background-image: linear-gradient(110deg, transparent 30%, rgba(255, 255, 255, 0.8) 50%, transparent 70%);
+  background-size: 200% 100%;
+  animation: vip-shimmer 2.6s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .vip-shimmer { animation: none; }
 }

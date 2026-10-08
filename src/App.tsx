@@ -1,320 +1,339 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  db, 
-  auth, 
-  onSnapshot, 
-  doc 
-} from './firebase';
-import { HOTELS } from './constants';
-import { GuestSearch } from './components/GuestSearch';
-import { SeatingPlan } from './components/SeatingPlan';
-import { ForecastView } from './components/ForecastView';
-import { GuestList } from './components/GuestList';
-import { Analytics } from './components/Analytics';
-import { ReportUploader } from './components/ReportUploader';
-import { Auth, isAdminUser } from './components/Auth';
-import { OperaAuditModal } from './components/OperaAuditModal';
-import { ReportMetadata, MealServiceType } from './types';
-import { businessDate, formatBusinessDateDisplay } from './lib/businessDate';
-import { 
-  Search, 
-  Users, 
-  BarChart3, 
-  Upload, 
-  History, 
-  TrendingUp, 
-  Table as TableIcon, 
+import React, { Suspense, lazy, useEffect, useMemo, useState } from 'react';
+import {
+  BarChart3,
   Clock,
   ExternalLink,
-  Utensils
+  LayoutGrid,
+  Settings as SettingsIcon,
+  TrendingUp,
+  Upload,
+  UserCheck,
+  Users,
+  Utensils,
+  ReceiptText,
+  ChefHat,
+  Wallet,
 } from 'lucide-react';
-import { AnimatePresence } from 'motion/react';
+import { db, doc, isFirebaseConfigured, onBackgroundWriteError, onSnapshot, purgeLegacyLocalData } from './firebase';
+import { HOTELS } from './constants';
+import type { MealServiceType, ReportMetadata } from './types';
+import { assessFreshness } from './lib/freshness';
+import { bangkokTime, formatBusinessDateDisplay } from './lib/businessDate';
+import { canImport, canManage, type Role } from './lib/access';
+import { useAccess } from './hooks/useAccess';
+import { useBusinessDate } from './hooks/useBusinessDate';
+import { NoAccessScreen, SignInScreen, UserBox } from './components/Auth';
+import { DoorScreen } from './door/DoorScreen';
+import { Banner, btn } from './components/ui';
+
+// The check-in screen is in the first download; every other screen is fetched when first opened.
+// The bundle was 1.8 MB, most of it charts and the floor-plan editor a door tablet rarely needs at
+// 06:00. The two other door screens are prefetched once the app is up (see Shell), so they still
+// open if the Wi-Fi drops later in the service.
+const loadSeatingPlan = () => import('./components/SeatingPlan').then((m) => ({ default: m.SeatingPlan }));
+const loadMenuView = () => import('./components/MenuView').then((m) => ({ default: m.MenuView }));
+const SeatingPlan = lazy(loadSeatingPlan);
+const MenuView = lazy(loadMenuView);
+const GuestList = lazy(() => import('./components/GuestList').then((m) => ({ default: m.GuestList })));
+const ForecastView = lazy(() => import('./components/ForecastView').then((m) => ({ default: m.ForecastView })));
+const Analytics = lazy(() => import('./components/Analytics').then((m) => ({ default: m.Analytics })));
+const ImportExport = lazy(() => import('./components/ImportExport').then((m) => ({ default: m.ImportExport })));
+const Settings = lazy(() => import('./components/Settings').then((m) => ({ default: m.Settings })));
+const OrdersScreen = lazy(() => import('./orders/screens').then((m) => ({ default: m.OrdersScreen })));
+const KitchenScreen = lazy(() => import('./orders/screens').then((m) => ({ default: m.KitchenScreen })));
+const SalesScreen = lazy(() => import('./orders/screens').then((m) => ({ default: m.SalesScreen })));
+
+/**
+ * Keeps one screen's failure on that screen. Without it, a screen that throws while rendering - or
+ * whose code cannot be fetched because the connection dropped - blanks the whole app, door included.
+ */
+class ScreenBoundary extends React.Component<{ resetKey: string; children: React.ReactNode }, { error: Error | null }> {
+  state: { error: Error | null } = { error: null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  componentDidUpdate(prev: { resetKey: string }) {
+    if (prev.resetKey !== this.props.resetKey && this.state.error) this.setState({ error: null });
+  }
+
+  render() {
+    if (!this.state.error) return this.props.children;
+    const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+    return (
+      <Banner tone="critical" title="This screen could not be opened" role="alert">
+        <p>{offline ? 'The device is offline. Check-in still works; this screen needs the connection once to load.' : this.state.error.message}</p>
+        <button className={`${btn.secondary} mt-3`} onClick={() => window.location.reload()}>
+          Reload
+        </button>
+      </Banner>
+    );
+  }
+}
+
+type View = 'door' | 'floor' | 'menu' | 'orders' | 'kitchen' | 'manifest' | 'forecast' | 'analytics' | 'sales' | 'import' | 'settings';
+
+interface NavItem {
+  id: View;
+  label: string;
+  icon: React.ReactNode;
+  /** Who sees it. The owner asked that not everything be visible to everyone. */
+  visible: (role: Role, hotelId: string) => boolean;
+  group: 'Door' | 'Management' | 'Administration';
+}
+
+const NAV: NavItem[] = [
+  { id: 'door', label: 'Check-in', icon: <UserCheck size={18} />, visible: () => true, group: 'Door' },
+  { id: 'floor', label: 'Floor plan', icon: <LayoutGrid size={18} />, visible: () => true, group: 'Door' },
+  // The Food Exchange is a Novotel outlet: the item is absent for ibis, not disabled.
+  { id: 'menu', label: 'Food Exchange menu', icon: <Utensils size={18} />, visible: (_r, h) => h === 'novotel', group: 'Door' },
+  // A la carte ordering, kitchen and sales for the Food Exchange - likewise Novotel only.
+  { id: 'orders', label: 'Orders', icon: <ReceiptText size={18} />, visible: (_r, h) => h === 'novotel', group: 'Door' },
+  { id: 'kitchen', label: 'Kitchen', icon: <ChefHat size={18} />, visible: (_r, h) => h === 'novotel', group: 'Door' },
+  { id: 'manifest', label: 'In-house manifest', icon: <Users size={18} />, visible: (r) => canManage(r), group: 'Management' },
+  { id: 'forecast', label: 'Meal forecast', icon: <TrendingUp size={18} />, visible: (r) => canManage(r), group: 'Management' },
+  { id: 'analytics', label: 'Analytics', icon: <BarChart3 size={18} />, visible: (r) => canManage(r), group: 'Management' },
+  { id: 'sales', label: 'Sales', icon: <Wallet size={18} />, visible: (r, h) => canManage(r) && h === 'novotel', group: 'Management' },
+  { id: 'import', label: 'Import & export', icon: <Upload size={18} />, visible: (r) => canImport(r), group: 'Administration' },
+  { id: 'settings', label: 'Settings', icon: <SettingsIcon size={18} />, visible: (r) => canManage(r), group: 'Administration' },
+];
+
+const FRESHNESS_TONE = { critical: 'critical', warn: 'warn', pending: 'pending', ok: 'ok' } as const;
+const FRESHNESS_HEADING: Record<string, string> = {
+  critical: 'Do not rely on this guest list',
+  warn: 'This guest list may not be today’s',
+  pending: 'Checking the guest list',
+  ok: '',
+};
 
 export function App() {
-  const [selectedHotel, setSelectedHotel] = useState(HOTELS[0]);
-  const [activeTab, setActiveTab] = useState<'search' | 'seating' | 'forecast' | 'manifest' | 'analytics' | 'upload'>('search');
-  const [activeMealService, setActiveMealService] = useState<MealServiceType>('breakfast');
+  if (!isFirebaseConfigured) {
+    return (
+      <main className="min-h-screen flex items-center justify-center p-6">
+        <Banner tone="critical" title="This build has no Firebase configuration" role="alert">
+          firebase-applet-config.json (or the VITE_FIREBASE_* variables) must name the project and its Firestore database. Nothing can be shown without it.
+        </Banner>
+      </main>
+    );
+  }
+  return <ConfiguredApp />;
+}
+
+function ConfiguredApp() {
+  const access = useAccess();
+  useEffect(() => purgeLegacyLocalData(), []);
+
+  if (!access.ready) {
+    return <main className="min-h-screen flex items-center justify-center text-muted-foreground">Starting…</main>;
+  }
+  if (!access.user) return <SignInScreen />;
+  if (access.role === 'none') return <NoAccessScreen user={access.user} onRetry={access.refresh} />;
+  return <Shell role={access.role} user={access.user} />;
+}
+
+function Shell({ role, user }: { role: Role; user: NonNullable<ReturnType<typeof useAccess>['user']> }) {
+  const [hotel, setHotel] = useState(HOTELS[0]);
+  const [view, setView] = useState<View>('door');
+  const [service, setService] = useState<MealServiceType>('breakfast');
+  const today = useBusinessDate();
+  const [clock, setClock] = useState(() => bangkokTime(new Date(), true));
+  const [backgroundErrors, setBackgroundErrors] = useState<string[]>([]);
+
+  useEffect(() => {
+    const id = setInterval(() => setClock(bangkokTime(new Date(), true)), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Fetch the other door screens' code once the door is showing, so they still open if the
+  // connection drops later. A failure here is not reported: opening the screen retries, and its
+  // boundary says what went wrong.
+  useEffect(() => {
+    const id = setTimeout(() => {
+      loadSeatingPlan().catch(() => undefined);
+      loadMenuView().catch(() => undefined);
+    }, 3000);
+    return () => clearTimeout(id);
+  }, []);
+
+  // A write queued offline that the server later refused must not vanish silently.
+  useEffect(
+    () =>
+      onBackgroundWriteError(({ label, error }) =>
+        setBackgroundErrors((prev) => [...prev, `${label}: ${(error as Error)?.message || 'refused by the server'}`])
+      ),
+    []
+  );
+
+  // A view the role (or the property) cannot see falls back to the door.
+  useEffect(() => {
+    const item = NAV.find((n) => n.id === view);
+    if (item && !item.visible(role, hotel.id)) setView('door');
+  }, [view, role, hotel.id]);
+
+  // Freshness of the guest list - see src/lib/freshness.ts.
   const [metadata, setMetadata] = useState<ReportMetadata | null>(null);
-  const [currentTime, setCurrentTime] = useState<string>('');
-  const [user, setUser] = useState<any>(auth.currentUser);
-  const [globalAuditModalOpen, setGlobalAuditModalOpen] = useState(false);
-
-  // Bangkok clock
+  const [metaError, setMetaError] = useState<{ code?: string; message?: string } | null>(null);
+  const [metaSettled, setMetaSettled] = useState(false);
   useEffect(() => {
-    const updateTime = () => {
-      const now = new Date();
-      const bkkTime = now.toLocaleTimeString('en-US', {
-        timeZone: 'Asia/Bangkok',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false,
-      });
-      setCurrentTime(bkkTime);
-    };
-    updateTime();
-    const interval = setInterval(updateTime, 1000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Auth listener
-  useEffect(() => {
-    if (auth.onAuthStateChanged) {
-      return auth.onAuthStateChanged((u: any) => {
-        setUser(u);
-      });
-    }
-  }, []);
-
-  // Subscribe to property metadata
-  useEffect(() => {
-    const metaRef = doc(db, 'hotels', selectedHotel.id, 'metadata', 'reports');
-    const unsub = onSnapshot(metaRef, (snap) => {
-      if (snap.exists()) {
-        setMetadata(snap.data() as ReportMetadata);
-      } else {
+    setMetaSettled(false);
+    setMetaError(null);
+    return onSnapshot(
+      doc(db, 'hotels', hotel.id, 'metadata', 'reports'),
+      (snap) => {
+        setMetaSettled(true);
+        setMetaError(null);
+        setMetadata(snap.exists() ? (snap.data() as ReportMetadata) : null);
+      },
+      (err) => {
+        setMetaSettled(true);
         setMetadata(null);
+        setMetaError({ code: err?.code, message: err?.message });
       }
+    );
+  }, [hotel.id]);
+
+  const freshness = useMemo(() => {
+    const lu = (metadata as { lastUploaded?: { toDate?: () => Date } } | null)?.lastUploaded;
+    return assessFreshness({
+      metadataDate: metadata?.date ?? null,
+      lastUploaded: lu && typeof lu.toDate === 'function' ? lu.toDate() : null,
+      today,
+      readError: metaError,
+      metadataSettled: metaSettled,
     });
+  }, [metadata, metaError, metaSettled, today]);
 
-    return () => unsub();
-  }, [selectedHotel.id]);
-
-  const isAdmin = user?.email ? isAdminUser(user.email) : false;
+  const groups = (['Door', 'Management', 'Administration'] as const)
+    .map((g) => ({ g, items: NAV.filter((n) => n.group === g && n.visible(role, hotel.id)) }))
+    .filter((x) => x.items.length > 0);
 
   return (
-    <div className={`min-h-screen bg-background text-foreground flex flex-col md:flex-row ${selectedHotel.theme}`}>
-      {/* Property & Navigation Sidebar */}
-      <aside className="w-full md:w-72 bg-card border-r border-border flex flex-col justify-between shrink-0 shadow-sm">
-        <div className="p-6 space-y-6">
-          {/* Brand Logo & Switcher */}
+    <div className={`min-h-screen bg-background text-foreground flex flex-col md:flex-row ${hotel.theme}`}>
+      <aside className="w-full md:w-72 bg-card border-r border-border flex flex-col shrink-0">
+        <div className="p-5 space-y-5 flex-1">
           <div>
             <div className="flex items-center gap-3">
-              <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold font-display text-sm text-white shadow-xs ${
-                selectedHotel.id === 'ibis' ? 'bg-[#E2001A]' : 'bg-[#1A3A6D]'
-              }`}>
-                {selectedHotel.id === 'ibis' ? 'I' : 'N'}
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-white ${hotel.id === 'ibis' ? 'bg-[#E2001A]' : 'bg-[#1A3A6D]'}`}>
+                {hotel.id === 'ibis' ? 'I' : 'N'}
               </div>
-              <div>
-                <h1 className="text-base font-bold font-display tracking-tight text-foreground leading-tight">{selectedHotel.name}</h1>
-                <span className="label-mono text-accent text-[9px] mt-0.5 block">{selectedHotel.resortCode} • Opera PMS</span>
+              <div className="min-w-0">
+                <h1 className="text-base font-bold font-display leading-tight">{hotel.name}</h1>
+                <span className="label-mono">{hotel.resortCode} · Opera</span>
               </div>
             </div>
+            <div className="mt-3 p-1 rounded-xl bg-[#F2EBE4]/70 border border-border grid grid-cols-2 gap-1" role="tablist" aria-label="Property">
+              {HOTELS.map((h) => (
+                <button
+                  key={h.id}
+                  role="tab"
+                  aria-selected={hotel.id === h.id}
+                  onClick={() => setHotel(h)}
+                  className={`h-10 rounded-lg text-sm font-bold cursor-pointer ${
+                    hotel.id === h.id ? (h.id === 'ibis' ? 'bg-[#E2001A] text-white' : 'bg-[#1A3A6D] text-white') : 'text-foreground'
+                  }`}
+                >
+                  {h.shortName}
+                </button>
+              ))}
+            </div>
+            <a href={hotel.restaurantUrl} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-accent">
+              {hotel.restaurantName} <ExternalLink size={11} />
+            </a>
+          </div>
 
-            {/* Seamless Property Switcher */}
-            <div id="property-switcher-container" className="mt-4 p-1 rounded-xl bg-[#F2EBE4]/60 border border-border grid grid-cols-2 gap-1.5">
-              {HOTELS.map((hotel) => {
-                const isSelected = selectedHotel.id === hotel.id;
-                const isNovotel = hotel.id === 'novotel';
-                return (
+          <nav className="space-y-4" aria-label="Main">
+            {groups.map(({ g, items }) => (
+              <div key={g} className="space-y-1">
+                <p className="px-3 label-mono">{g}</p>
+                {items.map((n) => (
                   <button
-                    key={hotel.id}
-                    id={`hotel-switcher-${hotel.id}`}
-                    aria-label={`Switch to ${hotel.name}`}
-                    title={`Switch to ${hotel.name}`}
-                    onClick={() => setSelectedHotel(hotel)}
-                    className={`py-2 px-3 rounded-lg text-xs font-mono-custom font-bold transition-all text-center flex items-center justify-center gap-2 cursor-pointer select-none ${
-                      isSelected
-                        ? isNovotel
-                          ? 'bg-[#1A3A6D] text-white shadow-sm ring-1 ring-[#1A3A6D]'
-                          : 'bg-[#E2001A] text-white shadow-sm ring-1 ring-[#E2001A]'
-                        : 'text-black bg-transparent hover:text-black hover:bg-[#F2EBE4]/80'
+                    key={n.id}
+                    onClick={() => setView(n.id)}
+                    aria-current={view === n.id ? 'page' : undefined}
+                    className={`w-full flex items-center gap-3 h-11 px-3 rounded-xl text-sm font-bold cursor-pointer ${
+                      view === n.id ? 'bg-white shadow-sm border border-black/10 text-foreground' : 'text-foreground/80 hover:bg-[#F2EBE4]'
                     }`}
                   >
-                    <span 
-                      className={`w-4 h-4 rounded-md flex items-center justify-center text-[10px] font-bold font-display leading-none transition-colors ${
-                        isSelected 
-                          ? 'bg-white/20 text-white' 
-                          : isNovotel 
-                            ? 'bg-[#1A3A6D]/15 text-[#1A3A6D]' 
-                            : 'bg-[#E2001A]/15 text-[#E2001A]'
-                      }`}
-                    >
-                      {isNovotel ? 'N' : 'I'}
-                    </span>
-                    <span className="leading-none">{isNovotel ? 'Novotel' : 'ibis'}</span>
+                    {n.icon}
+                    {n.label}
                   </button>
-                );
-              })}
-            </div>
-
-            {/* Official Restaurant Outlet Info */}
-            <div className="mt-3 p-2.5 rounded-xl bg-[#F2EBE4]/40 border border-border/80 space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-mono-custom font-bold uppercase tracking-wider text-black flex items-center gap-1">
-                  <Utensils size={10} className="text-black" />
-                  {selectedHotel.restaurantName}
-                </span>
-                <a
-                  href={selectedHotel.restaurantUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-black hover:text-accent transition-colors"
-                  title="Open restaurant website"
-                >
-                  <ExternalLink size={11} className="text-black" />
-                </a>
+                ))}
               </div>
-              <p className="text-[11px] text-black/80 font-medium leading-snug line-clamp-2">
-                {selectedHotel.cuisine}
-              </p>
-            </div>
-          </div>
-
-          {/* Navigation Links */}
-          <nav className="space-y-1 pt-1">
-            <p className="px-3 label-mono mb-2 text-black font-bold">
-              Host Stand Services
-            </p>
-
-            <button
-              onClick={() => setActiveTab('search')}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-mono-custom font-bold transition-all cursor-pointer ${
-                activeTab === 'search'
-                  ? 'bg-white text-black shadow-xs border border-black/20 ring-1 ring-black/10'
-                  : 'text-black hover:bg-[#F2EBE4]/80 hover:text-black'
-              }`}
-            >
-              <Search size={15} className="text-black shrink-0" />
-              <span className="text-black">Guest Check-In</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('seating')}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-mono-custom font-bold transition-all cursor-pointer ${
-                activeTab === 'seating'
-                  ? 'bg-white text-black shadow-xs border border-black/20 ring-1 ring-black/10'
-                  : 'text-black hover:bg-[#F2EBE4]/80 hover:text-black'
-              }`}
-            >
-              <TableIcon size={15} className="text-black shrink-0" />
-              <span className="text-black">Seating Floor Plan</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('forecast')}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-mono-custom font-bold transition-all cursor-pointer ${
-                activeTab === 'forecast'
-                  ? 'bg-white text-black shadow-xs border border-black/20 ring-1 ring-black/10'
-                  : 'text-black hover:bg-[#F2EBE4]/80 hover:text-black'
-              }`}
-            >
-              <TrendingUp size={15} className="text-black shrink-0" />
-              <span className="text-black">Meal Forecast</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('manifest')}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-mono-custom font-bold transition-all cursor-pointer ${
-                activeTab === 'manifest'
-                  ? 'bg-white text-black shadow-xs border border-black/20 ring-1 ring-black/10'
-                  : 'text-black hover:bg-[#F2EBE4]/80 hover:text-black'
-              }`}
-            >
-              <Users size={15} className="text-black shrink-0" />
-              <span className="text-black">In-House Manifest</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('analytics')}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-mono-custom font-bold transition-all cursor-pointer ${
-                activeTab === 'analytics'
-                  ? 'bg-white text-black shadow-xs border border-black/20 ring-1 ring-black/10'
-                  : 'text-black hover:bg-[#F2EBE4]/80 hover:text-black'
-              }`}
-            >
-              <BarChart3 size={15} className="text-black shrink-0" />
-              <span className="text-black">F&B Analytics</span>
-            </button>
-
-            {isAdmin && (
-              <button
-                onClick={() => setActiveTab('upload')}
-                className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-mono-custom font-bold transition-all cursor-pointer ${
-                  activeTab === 'upload'
-                    ? 'bg-white text-black shadow-xs border border-black/20 ring-1 ring-black/10'
-                    : 'text-black hover:bg-[#F2EBE4]/80 hover:text-black'
-                }`}
-              >
-                <Upload size={15} className="text-black shrink-0" />
-                <span className="text-black">Opera Sync & Historical Hub</span>
-              </button>
-            )}
-
-            <button
-              onClick={() => setGlobalAuditModalOpen(true)}
-              className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-mono-custom font-bold text-black hover:bg-[#F2EBE4]/80 hover:text-black transition-all cursor-pointer"
-            >
-              <History size={15} className="text-black shrink-0" />
-              <span className="text-black">Opera Audit History</span>
-            </button>
+            ))}
           </nav>
 
-          {/* Bangkok Clock Widget */}
-          <div className="p-3.5 rounded-xl bg-[#F2EBE4]/40 border border-border space-y-1">
-            <div className="flex items-center justify-between text-muted-foreground">
-              <span className="label-mono">Bangkok (UTC+7)</span>
-              <Clock size={11} className="text-accent" />
+          <div className="p-3 rounded-xl bg-[#F2EBE4]/50 border border-border">
+            <div className="flex items-center justify-between label-mono">
+              <span>Bangkok</span>
+              <Clock size={12} />
             </div>
-            <p className="text-lg font-bold font-mono-custom text-foreground tracking-tight">{currentTime || '--:--:--'}</p>
-            <p className="text-[10px] text-muted-foreground font-mono-custom">{formatBusinessDateDisplay(businessDate())}</p>
+            <p className="text-xl font-bold font-mono-custom">{clock}</p>
+            <p className="text-xs text-muted-foreground">Business day {formatBusinessDateDisplay(today)} · changes at 04:00</p>
           </div>
         </div>
-
-        {/* Accor Colleague Profile / Role */}
-        <div className="p-6 border-t border-border">
-          <Auth />
+        <div className="p-5 border-t border-border">
+          <UserBox user={user} role={role} />
         </div>
       </aside>
 
-      {/* Main View Area */}
-      <main className="flex-1 p-6 md:p-8 overflow-y-auto">
-        {activeTab === 'search' && (
-          <GuestSearch 
-            hotelId={selectedHotel.id} 
-            activeMealService={activeMealService}
-            setActiveMealService={setActiveMealService}
+      <main className="flex-1 p-4 md:p-6 overflow-y-auto space-y-4 min-w-0">
+        {backgroundErrors.length > 0 && (
+          <Banner
+            tone="critical"
+            title="Some changes made offline were refused by the server"
+            role="alert"
+            action={
+              <button className="h-11 px-3 rounded-xl border border-red-300 bg-white text-sm font-bold cursor-pointer" onClick={() => setBackgroundErrors([])}>
+                Dismiss
+              </button>
+            }
+          >
+            <ul className="list-disc pl-5">
+              {backgroundErrors.map((e, i) => (
+                <li key={i}>{e}</li>
+              ))}
+            </ul>
+            <p className="mt-1">Re-enter them now - they were not saved.</p>
+          </Banner>
+        )}
+
+        {freshness.level !== 'ok' && !['import', 'menu', 'kitchen', 'sales'].includes(view) && (
+          <Banner tone={FRESHNESS_TONE[freshness.level]} title={FRESHNESS_HEADING[freshness.level]} role={freshness.level === 'critical' ? 'alert' : 'status'}>
+            {freshness.message}
+          </Banner>
+        )}
+
+        {view === 'door' && (
+          <DoorScreen
+            hotelId={hotel.id}
+            today={today}
+            service={service}
+            onServiceChange={setService}
+            canManage={canManage(role)}
+            onOpenImport={canImport(role) ? () => setView('import') : undefined}
           />
         )}
-
-        {activeTab === 'seating' && (
-          <SeatingPlan 
-            hotelId={selectedHotel.id} 
-            isAdmin={isAdmin}
-            activeMealService={activeMealService}
-          />
+        {view !== 'door' && (
+          <ScreenBoundary resetKey={`${view}:${hotel.id}`}>
+            <Suspense fallback={<Banner tone="pending">Opening…</Banner>}>
+              {view === 'floor' && <SeatingPlan hotelId={hotel.id} isAdmin={role === 'admin'} activeMealService={service} />}
+              {view === 'menu' && hotel.id === 'novotel' && <MenuView />}
+              {view === 'manifest' && canManage(role) && <GuestList hotelId={hotel.id} today={today} />}
+              {view === 'forecast' && canManage(role) && <ForecastView hotelId={hotel.id} today={today} />}
+              {view === 'analytics' && canManage(role) && <Analytics hotelId={hotel.id} today={today} />}
+              {view === 'import' && canImport(role) && <ImportExport hotelId={hotel.id} today={today} />}
+              {view === 'settings' && canManage(role) && <Settings hotelId={hotel.id} today={today} role={role} />}
+              {view === 'orders' && hotel.id === 'novotel' && <OrdersScreen hotelId={hotel.id} today={today} role={role} />}
+              {view === 'kitchen' && hotel.id === 'novotel' && <KitchenScreen hotelId={hotel.id} today={today} />}
+              {view === 'sales' && hotel.id === 'novotel' && canManage(role) && <SalesScreen hotelId={hotel.id} today={today} />}
+            </Suspense>
+          </ScreenBoundary>
         )}
 
-        {activeTab === 'forecast' && (
-          <ForecastView 
-            hotelId={selectedHotel.id} 
-            isAdmin={isAdmin} 
-          />
-        )}
-
-        {activeTab === 'manifest' && (
-          <GuestList hotelId={selectedHotel.id} />
-        )}
-
-        {activeTab === 'analytics' && (
-          <Analytics hotelId={selectedHotel.id} />
-        )}
-
-        {activeTab === 'upload' && isAdmin && (
-          <ReportUploader hotelId={selectedHotel.id} />
-        )}
       </main>
-
-      {/* Global Audit Modal */}
-      <AnimatePresence>
-        {globalAuditModalOpen && (
-          <OperaAuditModal
-            hotelId={selectedHotel.id}
-            onClose={() => setGlobalAuditModalOpen(false)}
-          />
-        )}
-      </AnimatePresence>
     </div>
   );
 }
+
 export default App;

@@ -81,6 +81,7 @@ export const CheckInModal: React.FC<CheckInModalProps> = ({
   );
 
   const [submitting, setSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const totalHeadcount = adultsAte + childrenAte + infantsAte;
   const isOverCapacity = adultsAte > maxAdults || childrenAte > maxChildren;
@@ -108,6 +109,7 @@ export const CheckInModal: React.FC<CheckInModalProps> = ({
   const handleSaveCheckIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
+    setErrorMessage(null);
 
     const today = businessDate();
     const currentUser = auth.currentUser;
@@ -180,7 +182,16 @@ export const CheckInModal: React.FC<CheckInModalProps> = ({
       if (onSuccess) onSuccess();
       onClose();
     } catch (err) {
+      // The Firestore write wrappers reject now rather than resolving on failure, so this is a
+      // genuine failure rather than the silent false success it used to be. It must reach the
+      // host: nobody at a restaurant door reads a console, and an unexplained no-op just gets
+      // tapped again while the guest waits.
       console.error('Failed to save check-in:', err);
+      setErrorMessage(
+        `Could not save this check-in: ${(err as Error)?.message || 'unknown error'}. ` +
+          `Nothing was recorded. Check the connection and try again, or write the room down ` +
+          `and enter it when the connection returns.`
+      );
     } finally {
       setSubmitting(false);
     }
@@ -402,6 +413,18 @@ export const CheckInModal: React.FC<CheckInModalProps> = ({
                 onChange={(e) => setAuthorizingStaff(e.target.value)}
                 className="w-full px-3.5 py-2 rounded-lg border border-border bg-white text-foreground text-xs font-sans focus:outline-none focus:border-accent"
               />
+            </div>
+          )}
+
+          {/* A rejected write used to be console-only, so the modal simply stopped responding
+              with no explanation. This is the host's only signal that nothing was saved. */}
+          {errorMessage && (
+            <div
+              role="alert"
+              className="p-3 rounded-xl bg-rose-50 border border-rose-300 text-rose-900 text-xs flex items-start gap-2"
+            >
+              <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+              <span>{errorMessage}</span>
             </div>
           )}
 

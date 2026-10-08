@@ -60,15 +60,19 @@ export const GuestCardSkeleton: React.FC = () => (
   </div>
 );
 
-export const TableRowSkeleton: React.FC = () => (
+/**
+ * Callers pass `cols` so the placeholder row matches the table it stands in for. The component
+ * used to take no props and always draw seven cells, and callers passing `cols={8}` were never
+ * typechecked: @types/react was not installed, so every prop in the UI layer was unchecked.
+ */
+const ROW_WIDTHS = ['w-16', 'w-36', 'w-24', 'w-20', 'w-12', 'w-20', 'w-16', 'w-14', 'w-10', 'w-16'];
+export const TableRowSkeleton: React.FC<{ cols?: number }> = ({ cols = 7 }) => (
   <tr className="border-b border-border/60 animate-pulse">
-    <td className="py-3.5 px-4"><div className="h-5 w-16 bg-[#EAE2D9] rounded-lg" /></td>
-    <td className="py-3.5 px-4"><div className="h-4 w-36 bg-[#EAE2D9] rounded" /></td>
-    <td className="py-3.5 px-4"><div className="h-3.5 w-24 bg-[#EAE2D9]/70 rounded" /></td>
-    <td className="py-3.5 px-4"><div className="h-3.5 w-20 bg-[#EAE2D9]/70 rounded" /></td>
-    <td className="py-3.5 px-4"><div className="h-3.5 w-12 bg-[#EAE2D9] rounded" /></td>
-    <td className="py-3.5 px-4"><div className="h-5 w-20 bg-[#EAE2D9] rounded-md" /></td>
-    <td className="py-3.5 px-4"><div className="h-6 w-16 bg-[#EAE2D9]/80 rounded-md" /></td>
+    {Array.from({ length: cols }, (_, i) => (
+      <td key={i} className="py-3.5 px-4">
+        <div className={`h-4 ${ROW_WIDTHS[i % ROW_WIDTHS.length]} bg-[#EAE2D9] rounded`} />
+      </td>
+    ))}
   </tr>
 );
 
@@ -89,7 +93,8 @@ export const TableCardSkeleton: React.FC = () => (
   </div>
 );
 
-export const ChartSkeleton: React.FC = () => (
+/** `height` is the Tailwind height class of the chart area it stands in for. */
+export const ChartSkeleton: React.FC<{ height?: string }> = ({ height = 'h-64' }) => (
   <div className="bg-white rounded-2xl p-6 border border-border shadow-luxury space-y-4 animate-pulse">
     <div className="flex items-center justify-between">
       <div className="space-y-1.5">
@@ -98,7 +103,7 @@ export const ChartSkeleton: React.FC = () => (
       </div>
       <div className="h-8 w-24 bg-[#EAE2D9]/70 rounded-xl" />
     </div>
-    <div className="h-64 bg-[#F2EBE4]/50 rounded-xl flex items-end justify-between p-6 gap-3">
+    <div className={`${height} bg-[#F2EBE4]/50 rounded-xl flex items-end justify-between p-6 gap-3`}>
       {[40, 75, 55, 90, 65, 80, 45, 85].map((height, idx) => (
         <div key={idx} className="flex-1 flex flex-col items-center gap-2">
           <div 
