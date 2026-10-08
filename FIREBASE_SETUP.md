@@ -25,10 +25,17 @@ What is in production today is junk and test data, not a working day:
 | `hotels/*/tables` | 36 default tables |
 | `hotels/*/auditLogs` | 16 entries, all by the owner |
 
-## 1. Rules: published 8 Oct 2026, twice - and five changes since, NOT yet published
+## 1. Rules: published 8 Oct 2026, twice - and seven changes since, NOT yet published
 
 The console still holds the 09:57 version. Changed in this repo since, during the layout and
-permissions audit and the owner's decisions that followed it:
+permissions audit, the owner's decisions that followed it, and the features borrowed from
+open-source restaurant systems:
+
+New paths - until published, the database refuses them and the screens say so:
+
+- `bookings`: reservations and the waiting list, written by any host as themselves, history only
+  grows, never deleted.
+- `cashCounts`: drawer counts, created by any host as themselves, never edited or deleted.
 
 Narrower:
 

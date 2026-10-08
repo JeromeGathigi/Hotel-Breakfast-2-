@@ -6,13 +6,13 @@ const seen = (role: Role, hotel: string): View[] => navGroups(role, hotel).flatM
 
 describe('what each role sees', () => {
   it('gives door staff the door and, at Novotel, the Food Exchange', () => {
-    expect(seen('staff', 'novotel')).toEqual(['door', 'floor', 'orders', 'kitchen', 'menu']);
-    expect(seen('staff', 'ibis')).toEqual(['door', 'floor']);
+    expect(seen('staff', 'novotel')).toEqual(['door', 'bookings', 'floor', 'orders', 'kitchen', 'menu']);
+    expect(seen('staff', 'ibis')).toEqual(['door', 'bookings', 'floor']);
   });
 
   it('adds the reports, the Opera import and settings for a manager', () => {
-    expect(seen('manager', 'novotel')).toEqual(['door', 'floor', 'orders', 'kitchen', 'menu', 'manifest', 'forecast', 'analytics', 'sales', 'import', 'settings']);
-    expect(seen('manager', 'ibis')).toEqual(['door', 'floor', 'manifest', 'forecast', 'analytics', 'import', 'settings']);
+    expect(seen('manager', 'novotel')).toEqual(['door', 'bookings', 'floor', 'orders', 'kitchen', 'menu', 'manifest', 'forecast', 'analytics', 'sales', 'import', 'settings']);
+    expect(seen('manager', 'ibis')).toEqual(['door', 'bookings', 'floor', 'manifest', 'forecast', 'analytics', 'import', 'settings']);
   });
 
   it('shows an administrator the same screens - data maintenance is a tab inside Settings', () => {

@@ -3,6 +3,7 @@ import { auth, collection, db, doc, logOperaAuditTrail, onSnapshot, query, runTr
 import type { DiningTable, Guest } from '../types';
 import { OrderError, openOrder, type Order } from './orderModel';
 import { dishName } from './menuCatalog';
+import { describeDifference, type CashCount } from './cashCount';
 import type { NewOrderInput, OrderOp, OrdersStore } from './store';
 
 /**
@@ -49,6 +50,29 @@ export function useSoldOut(hotelId: string): { soldOut: string[]; error: string 
 }
 
 /**
+ * Bills still open from an earlier business day. The order list shows one day at a time, so a bill
+ * left open yesterday - unpaid, or paid but never closed - was invisible and missing from every
+ * report's revenue. URY's "unclosed bills" alert, from the systems surveyed on 8 Oct 2026. One
+ * equality filter, so it needs no composite index; the day is compared here.
+ */
+export function useStaleOpenOrders(hotelId: string, today: string): { orders: Order[]; error: string | null } {
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    setError(null);
+    return onSnapshot(
+      query(collection(db, 'hotels', hotelId, 'orders'), where('status', '==', 'open')),
+      (snap) => {
+        setOrders(snap.docs.map((d) => d.data() as Order).filter((o) => o.businessDate < today).sort((a, b) => a.createdAt.localeCompare(b.createdAt)));
+        setError(null);
+      },
+      (e) => setError(e.message)
+    );
+  }, [hotelId, today]);
+  return { orders, error };
+}
+
+/**
  * Which of the hotel's other lists a screen needs. The kitchen and the sales report never use the
  * in-house guest list or the tables, so they no longer download them: a display on the pass has
  * no business holding every guest's name.
@@ -60,6 +84,7 @@ export interface OrderStreams {
 
 export function useFirestoreOrders(hotelId: string, from: string, to: string, today: string, streams: OrderStreams = { guests: true, tables: true }): OrdersStore {
   const [orders, setOrders] = useState<Order[]>([]);
+  const [cashCounts, setCashCounts] = useState<CashCount[]>([]);
   const [soldOut, setSoldOutState] = useState<string[]>([]);
   const [tables, setTables] = useState<DiningTable[]>([]);
   const [guests, setGuests] = useState<Guest[]>([]);
@@ -87,6 +112,11 @@ export function useFirestoreOrders(hotelId: string, from: string, to: string, to
         }
       ),
       onSnapshot(availabilityDoc(hotelId), (snap) => setSoldOutState(snap.exists() ? ((snap.data().soldOut as string[]) ?? []) : []), fail('menu')),
+      onSnapshot(
+        query(collection(db, 'hotels', hotelId, 'cashCounts'), where('businessDate', '>=', from), where('businessDate', '<=', to)),
+        (snap) => setCashCounts(snap.docs.map((d) => d.data() as CashCount).sort((a, b) => b.countedAt.localeCompare(a.countedAt))),
+        fail('cash')
+      ),
     ];
     if (withTables) {
       unsubs.push(onSnapshot(collection(db, 'hotels', hotelId, 'tables'), (snap) => setTables(snap.docs.map((d) => ({ ...(d.data() as DiningTable), id: d.id }))), fail('tables')));
@@ -99,6 +129,7 @@ export function useFirestoreOrders(hotelId: string, from: string, to: string, to
 
   return useMemo<OrdersStore>(
     () => ({
+      hotelId,
       orders,
       loading,
       errors,
@@ -141,6 +172,20 @@ export function useFirestoreOrders(hotelId: string, from: string, to: string, to
           await logOperaAuditTrail(hotelId, 'ORDER', `${(changed as Order).number}: ${last.action.replace('-', ' ')} - ${last.details}`, (changed as Order).roomNumber ?? undefined);
         }
       },
+      cashCounts,
+      async saveCashCount(count: CashCount) {
+        try {
+          // Online only, like the bills it is checked against; a count is a create, never an edit.
+          await runTransaction(db, async (tx) => {
+            const ref = doc(db, 'hotels', hotelId, 'cashCounts', count.id);
+            if ((await tx.get(ref)).exists()) throw new OrderError('A count was saved at the same moment. Try again.');
+            tx.set(ref, sanitizeData(count) as unknown as Record<string, unknown>);
+          });
+        } catch (e) {
+          throw friendly(e);
+        }
+        void logOperaAuditTrail(hotelId, 'ORDER', `Cash drawer counted for ${count.businessDate}: ${count.countedThb.toFixed(2)} against ${count.expectedThb.toFixed(2)} expected - ${describeDifference(count.differenceThb)}`);
+      },
       async setSoldOut(baseIds: string[]) {
         try {
           await runTransaction(db, async (tx) => {
@@ -157,6 +202,6 @@ export function useFirestoreOrders(hotelId: string, from: string, to: string, to
         for (const id of soldOut) if (!now.has(id)) void logOperaAuditTrail(hotelId, 'MENU', `${dishName(id)} available again`);
       },
     }),
-    [orders, loading, errors, soldOut, tables, guests, me, hotelId, today]
+    [orders, loading, errors, soldOut, tables, guests, me, hotelId, today, cashCounts]
   );
 }

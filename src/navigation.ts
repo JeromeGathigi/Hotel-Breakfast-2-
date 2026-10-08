@@ -10,7 +10,7 @@ import { canImport, canManage, canUseDoor, type Role } from './lib/access';
  * manager is allowed under an administrator-only "Import & export" screen.
  */
 
-export type View = 'door' | 'floor' | 'orders' | 'kitchen' | 'menu' | 'manifest' | 'forecast' | 'analytics' | 'sales' | 'import' | 'settings';
+export type View = 'door' | 'bookings' | 'floor' | 'orders' | 'kitchen' | 'menu' | 'manifest' | 'forecast' | 'analytics' | 'sales' | 'import' | 'settings';
 
 export const NAV_GROUPS = ['Door', 'Food Exchange', 'Management', 'Administration'] as const;
 export type NavGroup = (typeof NAV_GROUPS)[number];
@@ -29,6 +29,8 @@ const novotel = (hotelId: string) => hotelId === 'novotel';
 
 export const NAV: readonly NavItem[] = [
   { id: 'door', label: 'Check-in', group: 'Door', visible: (r) => canUseDoor(r), usesGuestList: true },
+  // Reservations and the waiting list, for both restaurants - see src/bookings/bookingModel.ts.
+  { id: 'bookings', label: 'Bookings', group: 'Door', visible: (r) => canUseDoor(r), usesGuestList: true },
   { id: 'floor', label: 'Floor plan', group: 'Door', visible: (r) => canUseDoor(r), usesGuestList: true },
   { id: 'orders', label: 'Orders', group: 'Food Exchange', visible: (r, h) => canUseDoor(r) && novotel(h), usesGuestList: true },
   { id: 'kitchen', label: 'Kitchen', group: 'Food Exchange', visible: (r, h) => canUseDoor(r) && novotel(h), usesGuestList: false },

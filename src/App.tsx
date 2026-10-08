@@ -19,7 +19,9 @@ import { Banner, btn } from './components/ui';
 // Shell), so they still open if the Wi-Fi drops later in the service.
 const loadSeatingPlan = () => import('./components/SeatingPlan').then((m) => ({ default: m.SeatingPlan }));
 const loadOrderScreens = () => import('./orders/screens');
+const loadBookings = () => import('./bookings/screens').then((m) => ({ default: m.BookingsScreen }));
 const SeatingPlan = lazy(loadSeatingPlan);
+const BookingsScreen = lazy(loadBookings);
 const GuestList = lazy(() => import('./components/GuestList').then((m) => ({ default: m.GuestList })));
 const ForecastView = lazy(() => import('./components/ForecastView').then((m) => ({ default: m.ForecastView })));
 const Analytics = lazy(() => import('./components/Analytics').then((m) => ({ default: m.Analytics })));
@@ -155,6 +157,7 @@ function Shell({ role, user }: { role: Role; user: NonNullable<ReturnType<typeof
   useEffect(() => {
     const id = setTimeout(() => {
       loadSeatingPlan().catch(() => undefined);
+      loadBookings().catch(() => undefined);
       loadOrderScreens().catch(() => undefined);
     }, 3000);
     return () => clearTimeout(id);
@@ -213,6 +216,8 @@ function Shell({ role, user }: { role: Role; user: NonNullable<ReturnType<typeof
 
   const screen = (): React.ReactNode => {
     switch (view) {
+      case 'bookings':
+        return <BookingsScreen hotelId={hotel.id} today={today} />;
       case 'floor':
         return <SeatingPlan hotelId={hotel.id} isAdmin={canEditFloorPlan(role)} activeMealService={service} />;
       case 'orders':

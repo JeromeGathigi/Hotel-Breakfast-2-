@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Plus, Search, ReceiptText } from 'lucide-react';
+import { Plus, Search, ReceiptText, Wallet } from 'lucide-react';
 import { Banner, btn } from '../components/ui';
 import { formatBusinessDateDisplay } from '../lib/businessDate';
 import { timeInBangkok } from '../lib/dates';
@@ -8,6 +8,8 @@ import { channelLabel, formatThb, orderTotals, type Order, type OrderStatus } fr
 import type { OrdersStore } from './store';
 import { NewOrderDialog } from './NewOrderDialog';
 import { OrderPanel } from './OrderPanel';
+import { CashCountDialog } from './CashCountDialog';
+import { describeDifference } from './cashCount';
 
 /**
  * The order list - Papaya's Orders page for the Food Exchange: Open / Complete / Cancelled, search
@@ -39,10 +41,14 @@ export const OrdersView: React.FC<{
   date: string;
   today: string;
   onDateChange: (d: string) => void;
-}> = ({ store, role, date, today, onDateChange }) => {
+  /** Bills still open from earlier business days - see useStaleOpenOrders. */
+  staleOpen?: Order[];
+}> = ({ store, role, date, today, onDateChange, staleOpen = [] }) => {
   const [tab, setTab] = useState<OrderStatus>('open');
   const [search, setSearch] = useState('');
   const [creating, setCreating] = useState(false);
+  const [counting, setCounting] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const manager = canManage(role);
   const isToday = date === today;
@@ -70,6 +76,11 @@ export const OrdersView: React.FC<{
               <input type="date" value={date} max={today} onChange={(e) => e.target.value && onDateChange(e.target.value)} className="h-11 px-3 rounded-xl border border-border bg-white" />
             </label>
           )}
+          {isToday && (
+            <button className={btn.secondary} onClick={() => setCounting(true)} disabled={!store.me}>
+              <Wallet size={18} /> Count drawer
+            </button>
+          )}
           <button className={btn.primary} onClick={() => setCreating(true)} disabled={!isToday || !store.me}>
             <Plus size={18} /> New order
           </button>
@@ -77,6 +88,25 @@ export const OrdersView: React.FC<{
       </div>
 
       {!isToday && <Banner tone="info">You are looking at {formatBusinessDateDisplay(date)}. New orders go on today's list.</Banner>}
+      {notice && <Banner tone="ok">{notice}</Banner>}
+      {staleOpen.length > 0 && (
+        <Banner tone="warn" title={`${staleOpen.length} bill${staleOpen.length === 1 ? '' : 's'} from earlier days ${staleOpen.length === 1 ? 'is' : 'are'} still open`}>
+          <p>An open bill counts in no day's revenue. {manager ? 'Close it, or cancel it with a reason.' : 'Tell the duty manager.'}</p>
+          <div className="flex flex-wrap gap-2 pt-2">
+            {staleOpen.map((o) =>
+              manager ? (
+                <button key={o.id} className={btn.secondary} onClick={() => onDateChange(o.businessDate)}>
+                  {o.number} · {formatBusinessDateDisplay(o.businessDate)} · owes {formatThb(orderTotals(o).outstandingThb)}
+                </button>
+              ) : (
+                <span key={o.id} className="text-sm font-semibold">
+                  {o.number} · {formatBusinessDateDisplay(o.businessDate)}
+                </span>
+              )
+            )}
+          </div>
+        </Banner>
+      )}
       {store.errors.orders && (
         <Banner tone="critical" title="Orders could not be loaded" role="alert">
           {store.errors.orders}
@@ -121,6 +151,7 @@ export const OrdersView: React.FC<{
           {shown.map((o) => {
             const t = orderTotals(o);
             const inKitchen = o.lines.filter((l) => l.status === 'sent').length;
+            const ready = o.lines.filter((l) => l.status === 'ready').length;
             return (
               <button key={o.id} onClick={() => setOpenId(o.id)} className="w-full text-left p-4 hover:bg-[#F2EBE4]/50 grid grid-cols-2 md:grid-cols-[6rem_1fr_6rem_8rem_8rem_7rem] gap-2 items-center cursor-pointer">
                 <span className="font-bold font-mono-custom">{o.number}</span>
@@ -132,6 +163,7 @@ export const OrdersView: React.FC<{
                     {o.lines.filter((l) => l.status !== 'void').length} items
                     {t.heldCount ? ` · ${t.heldCount} not sent` : ''}
                     {inKitchen ? ` · ${inKitchen} in kitchen` : ''}
+                    {ready ? <strong className="text-lime-900"> · {ready} ready to serve</strong> : null}
                   </span>
                 </span>
                 <span className="text-sm text-muted-foreground">{timeInBangkok(o.createdAt)}</span>
@@ -163,6 +195,20 @@ export const OrdersView: React.FC<{
             setTab('open');
             setOpenId(o.id);
           }}
+        />
+      )}
+      {counting && (
+        <CashCountDialog
+          hotelId={store.hotelId}
+          businessDate={today}
+          orders={store.orders}
+          previous={store.cashCounts.filter((c) => c.businessDate === today)}
+          me={store.me}
+          onSave={async (c) => {
+            await store.saveCashCount(c);
+            setNotice(`Drawer counted: ${formatThb(c.countedThb)} - ${describeDifference(c.differenceThb)}.`);
+          }}
+          onClose={() => setCounting(false)}
         />
       )}
       {selected && <OrderPanel order={selected} store={store} manager={manager} canMarkSoldOut={canMarkSoldOut(role)} onClose={() => setOpenId(null)} />}

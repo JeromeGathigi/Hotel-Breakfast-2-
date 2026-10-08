@@ -63,9 +63,16 @@ and adapted to the hotel:
   served only by a manager, since taking it off the bill is a comp - and every action is kept on
   the order with who did it.
 - **Kitchen** - everything sent and not yet served, oldest first, with how long it has waited.
+  The cook taps **Ready** when a dish is up; the order shows it as ready to serve, and tickets that
+  are all up wait in green until carried out. An optional chime sounds for each new ticket, and
+  the kitchen marks dishes sold out from here.
+- **Payments** can be split equally between the guests left to pay; the last pays the odd satang.
+- **Count drawer** (Orders, any host) - the float plus the day's cash payments against what is in
+  the drawer, by notes and coins or as one total; a difference must be explained, and a recount is
+  another record. Bills still open from earlier days are flagged on Orders.
 - **Sales** (managers) - revenue, covers, service charge and VAT, discounts and comps, payment
-  mix, items, hours, staff, voids and cancellations, and the room charges to post to Opera; CSV
-  and print.
+  mix, items, hours, the drawer counts, the room charges to post to Opera, and per person the
+  bills they closed and the voids, discounts, comps and cancellations they made; CSV and print.
 
 Prices are the menu's net prices; bills add 10% service charge, then 7% VAT on the total. Bills
 and kitchen tickets print through the browser at 80 mm. Not included: guest QR self-ordering,
@@ -73,7 +80,32 @@ online payments, delivery partners, printer pairing and posting to Opera - room 
 listed for the front office to post. Orders need the network: offline, nothing changes and the
 host is told so.
 
-Try it without signing in at <http://localhost:3000/dev/orders-preview.html> (invented orders, in
+## Bookings
+
+Reservations and a waiting list for both restaurants (**Door → Bookings**, every host): a booking
+for a time, a party size and a meal service, under a name or an in-house room, with notes and an
+optional table; a warning when one table is booked twice within a sitting; late arrivals flagged
+after 15 minutes; booked covers by half hour. Walk-ins go on the waiting list with the wait they
+were told, and the list times them. Seating a party marks its table occupied on the floor plan;
+no-shows and cancellations are recorded, never deleted, and any step can be put back. For
+breakfast, the room is still checked in on Check-in, which is what counts the cover.
+
+Try it without signing in at <http://localhost:3000/dev/bookings-preview.html>.
+
+## Borrowed from open-source restaurant systems (8 Oct 2026)
+
+All 1,868 repositories under GitHub's `restaurant-management` topic were listed and the 33
+strongest read. About half are food-delivery apps and their clones; the rest are POS, menu, QR
+ordering and reservation projects. Ideas borrowed (no code was copied - several are AGPL or GPL):
+the kitchen's Ready stage and chime (URY Mosaic, FloCafe, POSR, Satisfecho), reservations and a
+waiting list (TastyIgniter, OpenResto, Satisfecho, HotPlate), drawer counts and alerts for
+unclosed bills (URY, POSR), equal-share payments (FloCafe), per-person voids and discounts (URY,
+POSR), and kitchen-side sold-out marking (POSR, Satisfecho). Left out: guest QR ordering, online
+payments and delivery (public write access, payment contracts, couriers), inventory and recipes
+(no stock data), priced modifiers (the menu prints none), and a Thai interface (worth its own
+project).
+
+Try the orders without signing in at <http://localhost:3000/dev/orders-preview.html> (invented orders, in
 memory).
 
 ## Each morning
@@ -163,6 +195,8 @@ Firestore database `ai-studio-hotelbreakfast2-acad9cf6-2960-4fc6-9358-4df6deffdf
 | `auditLogs/{id}` | append-only, each entry written as its author; read by managers (Settings) | everyone |
 | `orders/{date-seq}` | Food Exchange orders, with their items, payments and history; never deleted | staff (discounts, comps, removing a payment, voiding a served dish, reopening: managers) |
 | `counters/orders-{date}` | the day's last order number | staff, in the same transaction as the order |
+| `cashCounts/{date-time}` | drawer counts against the day's cash payments; never edited | any host, as themselves |
+| `bookings/{id}` | reservations and the waiting list, each with its history; never deleted | any host, as themselves |
 | `menuState/availability` | dishes marked sold out; each change also in the audit log | anyone at the door, as themselves |
 | `daily_summaries/{date}` | synthetic data from retired code; remove it in Settings → Data maintenance | nobody |
 

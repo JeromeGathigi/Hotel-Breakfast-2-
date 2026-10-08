@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { canMarkSoldOut, type Role } from '../lib/access';
 import { MenuView } from '../components/MenuView';
 import { Banner } from '../components/ui';
-import { useFirestoreOrders, useSoldOut } from './firestoreOrders';
+import { useFirestoreOrders, useSoldOut, useStaleOpenOrders } from './firestoreOrders';
 import { OrdersView } from './OrdersView';
 import { KitchenView } from './KitchenView';
 import { SalesView } from './SalesView';
@@ -14,7 +14,8 @@ export function OrdersScreen({ hotelId, today, role }: { hotelId: string; today:
   // Follow the business day over the 04:00 rollover.
   useEffect(() => setDate(today), [today]);
   const store = useFirestoreOrders(hotelId, date, date, today);
-  return <OrdersView store={store} role={role} date={date} today={today} onDateChange={setDate} />;
+  const stale = useStaleOpenOrders(hotelId, today);
+  return <OrdersView store={store} role={role} date={date} today={today} onDateChange={setDate} staleOpen={stale.orders} />;
 }
 
 export function KitchenScreen({ hotelId, today, role }: { hotelId: string; today: string; role: Role }) {

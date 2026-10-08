@@ -5,6 +5,8 @@ import {
   cancelOrder,
   changeDetails,
   closeOrder,
+  equalShare,
+  markReady,
   markServed,
   openOrder,
   orderTotals,
@@ -132,6 +134,37 @@ describe('items', () => {
     o = markServed(o, ['L1'], host('2026-10-08T05:50:00.000Z'));
     expect(o.lines[0]).toMatchObject({ status: 'served', servedAt: '2026-10-08T05:50:00.000Z' });
   });
+
+  it('lets the kitchen bump a dish ready, and the waiter serve it from the pass', () => {
+    let o = addItem(sendToKitchen(addItem(table(), KHAO_SOY, 1, '', host()), host()), PHAD_KRA_PAO, 1, '', host());
+    o = markReady(o, ['L1', 'L2'], host('2026-10-08T05:48:00.000Z'));
+    // Only what is being cooked can be ready; the unsent Phad Kra Pao stays held.
+    expect(o.lines.map((l) => l.status)).toEqual(['ready', 'held']);
+    expect(o.lines[0].readyAt).toBe('2026-10-08T05:48:00.000Z');
+    expect(o.log.at(-1)).toMatchObject({ action: 'items-ready', details: '1 × Khao Soy Gai' });
+    expect(markReady(o, ['L1'], host())).toBe(o); // already up: nothing to record
+    o = markServed(o, ['L1'], host('2026-10-08T05:50:00.000Z'));
+    expect(o.lines[0]).toMatchObject({ status: 'served', servedAt: '2026-10-08T05:50:00.000Z' });
+  });
+
+  it("treats a dish at the pass as the kitchen's: it blocks cancelling, and a host may void it", () => {
+    let o = markReady(sendToKitchen(addItem(table(), KHAO_SOY, 1, '', host()), host()), ['L1'], host());
+    expect(() => cancelOrder(o, 'Opened by mistake', host())).toThrow(/Void them/);
+    o = voidLine(o, 'L1', 'Guest changed mind', host());
+    expect(o.lines[0].status).toBe('void');
+    expect(servedVoidThb(o)).toBe(0); // not eaten, so not a manager's call
+  });
+});
+
+describe('splitting what is left equally', () => {
+  it('rounds each share down so the last guest pays the odd satang and the bill closes exactly', () => {
+    expect(equalShare(100, 3)).toBe(33.33);
+    expect(equalShare(100 - 33.33, 2)).toBe(33.33);
+    expect(Math.round((100 - 33.33 - 33.33) * 100) / 100).toBe(33.34);
+    expect(equalShare(588.5, 2)).toBe(294.25);
+    expect(equalShare(588.5, 1)).toBe(588.5);
+    expect(equalShare(0, 4)).toBe(0);
+  });
 });
 
 describe('payments and closing', () => {
@@ -255,5 +288,19 @@ describe('sales summary', () => {
     expect(s.roomCharges).toEqual([expect.objectContaining({ orderNumber: 'FX-008', roomNumber: '412', amountThb: 200 })]);
     expect(s.stillOpen).toEqual([{ orderNumber: 'FX-009', where: 'Table 12', totalThb: 294.25, outstandingThb: 294.25 }]);
     expect(s.cancellations).toEqual([expect.objectContaining({ orderNumber: 'FX-010', reason: 'Opened by mistake' })]);
+  });
+
+  it('puts each void, discount, comp and cancellation against the person who made it', () => {
+    let a = sendToKitchen(addItem(addItem(table(), KHAO_SOY, 2, '', host()), PHAD_KRA_PAO, 1, '', host()), host());
+    a = voidLine(a, 'L2', 'Wrong item entered', host()); // 280 off, by the host
+    a = setDiscount(a, { kind: 'percent', value: 10, reason: 'Accor ALL member' }, manager()); // 50 off, by the manager
+    a = addPayment(a, { method: 'comp', amountThb: 100, reference: 'Delay' }, manager());
+    const d = cancelOrder({ ...table(), id: 'd', number: 'FX-010' }, 'Opened by mistake', host());
+    const byPerson = Object.fromEntries(summariseOrders([a, d]).byStaff.map((p) => [p.email, p]));
+    expect(byPerson['host@accor.com']).toMatchObject({ opened: 1, voids: 1, voidThb: 280, cancelled: 1, discounts: 0, comps: 0 });
+    expect(byPerson['manager@accor.com']).toMatchObject({ discounts: 1, discountThb: 50, comps: 1, compThb: 100, voids: 0 });
+    // A line voided before voidedBy existed is found through the order's history.
+    const legacy = { ...a, lines: a.lines.map((l) => ({ ...l, voidedBy: undefined })) };
+    expect(summariseOrders([legacy]).byStaff.find((p) => p.email === 'host@accor.com')?.voids).toBe(1);
   });
 });

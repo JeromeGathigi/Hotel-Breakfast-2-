@@ -32,6 +32,33 @@ export interface RoomCharge {
   by: string;
 }
 
+/**
+ * What each person did on the bills: the revenue they closed, and the exceptions - voids,
+ * discounts, comps, cancellations - that a manager reviews person by person. URY's staff
+ * performance and POSR's "voids and discounts by order taker", from the systems surveyed on
+ * 8 Oct 2026.
+ */
+export interface StaffSummary {
+  email: string;
+  opened: number;
+  closed: number;
+  revenueThb: number;
+  voids: number;
+  voidThb: number;
+  discounts: number;
+  discountThb: number;
+  comps: number;
+  compThb: number;
+  cancelled: number;
+}
+
+/** Who voided a line: recorded on it since 8 Oct 2026, read from the order's history before. */
+function voidedBy(o: Order, l: Order['lines'][number]): string {
+  if (l.voidedBy) return l.voidedBy;
+  const entry = o.log.find((e) => e.action === 'item-voided' && e.details.startsWith(`${l.qty} × ${l.name}`));
+  return entry?.by ?? o.updatedBy;
+}
+
 export interface SalesSummary {
   orderCount: { open: number; complete: number; cancelled: number };
   covers: number;
@@ -46,7 +73,7 @@ export interface SalesSummary {
   byMethod: Record<PaymentMethod, number>;
   byItem: ItemSales[];
   byHour: Array<{ hour: number; orders: number; revenueThb: number }>;
-  byStaff: Array<{ email: string; opened: number; closed: number; revenueThb: number }>;
+  byStaff: StaffSummary[];
   roomCharges: RoomCharge[];
   /** `served`: voided after it reached the table - a manager's call. */
   voids: Array<{ orderNumber: string; item: string; qty: number; netThb: number; reason: string; served: boolean }>;
@@ -76,10 +103,10 @@ export function summariseOrders(orders: Order[]): SalesSummary {
   };
   const items = new Map<string, ItemSales>();
   const hours = new Map<number, { orders: number; revenueThb: number }>();
-  const staff = new Map<string, { opened: number; closed: number; revenueThb: number }>();
+  const staff = new Map<string, Omit<StaffSummary, 'email'>>();
   const person = (email: string) => {
     let p = staff.get(email);
-    if (!p) staff.set(email, (p = { opened: 0, closed: 0, revenueThb: 0 }));
+    if (!p) staff.set(email, (p = { opened: 0, closed: 0, revenueThb: 0, voids: 0, voidThb: 0, discounts: 0, discountThb: 0, comps: 0, compThb: 0, cancelled: 0 }));
     return p;
   };
 
@@ -88,15 +115,32 @@ export function summariseOrders(orders: Order[]): SalesSummary {
     if (o.status !== 'cancelled') person(o.createdBy).opened += 1;
 
     for (const l of o.lines) {
-      if (l.status === 'void') s.voids.push({ orderNumber: o.number, item: l.name, qty: l.qty, netThb: round2(l.unitPriceThb * l.qty), reason: l.voidReason ?? '', served: Boolean(l.servedAt) });
+      if (l.status !== 'void') continue;
+      const netThb = round2(l.unitPriceThb * l.qty);
+      s.voids.push({ orderNumber: o.number, item: l.name, qty: l.qty, netThb, reason: l.voidReason ?? '', served: Boolean(l.servedAt) });
+      const who = person(voidedBy(o, l));
+      who.voids += 1;
+      who.voidThb += netThb;
+    }
+    for (const p of o.payments) {
+      if (p.method !== 'comp') continue;
+      const who = person(p.by);
+      who.comps += 1;
+      who.compThb += p.amountThb;
     }
 
     if (o.status === 'cancelled') {
       s.cancellations.push({ orderNumber: o.number, reason: o.cancelReason ?? '', by: o.closedBy ?? o.updatedBy, at: o.closedAt ?? o.updatedAt });
+      person(o.closedBy ?? o.updatedBy).cancelled += 1;
       continue;
     }
 
     const t = orderTotals(o);
+    if (o.discount && t.discountThb > 0) {
+      const who = person(o.discount.by);
+      who.discounts += 1;
+      who.discountThb += t.discountThb;
+    }
     if (o.status === 'open') {
       s.stillOpen.push({ orderNumber: o.number, where: channelLabel(o), totalThb: t.totalThb, outstandingThb: t.outstandingThb });
       continue;
@@ -164,7 +208,9 @@ export function summariseOrders(orders: Order[]): SalesSummary {
   s.averagePerCoverThb = s.covers > 0 ? round2(s.revenueThb / s.covers) : null;
   s.byItem = [...items.values()].map((i) => ({ ...i, netThb: round2(i.netThb) })).sort((a, b) => b.netThb - a.netThb || b.qty - a.qty);
   s.byHour = [...hours.entries()].map(([hour, v]) => ({ hour, orders: v.orders, revenueThb: round2(v.revenueThb) })).sort((a, b) => a.hour - b.hour);
-  s.byStaff = [...staff.entries()].map(([email, v]) => ({ email, ...v, revenueThb: round2(v.revenueThb) })).sort((a, b) => b.revenueThb - a.revenueThb);
+  s.byStaff = [...staff.entries()]
+    .map(([email, v]) => ({ email, ...v, revenueThb: round2(v.revenueThb), voidThb: round2(v.voidThb), discountThb: round2(v.discountThb), compThb: round2(v.compThb) }))
+    .sort((a, b) => b.revenueThb - a.revenueThb || a.email.localeCompare(b.email));
   s.roomCharges.sort((a, b) => a.at.localeCompare(b.at));
   return s;
 }

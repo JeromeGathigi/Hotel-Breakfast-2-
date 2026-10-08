@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Banner, Modal, btn } from '../components/ui';
 import type { Guest } from '../types';
-import { PAYMENT_LABEL, formatThb, type NewPayment, type Order, type PaymentMethod } from './orderModel';
+import { PAYMENT_LABEL, equalShare, formatThb, type NewPayment, type Order, type PaymentMethod } from './orderModel';
 import { findGuests } from './NewOrderDialog';
 
 /**
@@ -84,6 +84,15 @@ export const PaymentDialog: React.FC<{
             <input type="number" inputMode="decimal" step="0.01" min="0" value={tendered} onChange={(e) => setTendered(e.target.value)} className="mt-1 w-full h-11 px-3 rounded-xl border border-border text-base tabular-nums" />
           </label>
         )}
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Split what is left equally">
+        <span className="text-sm font-bold mr-1">Split what is left between</span>
+        {[2, 3, 4, 5, 6].map((n) => (
+          <button key={n} type="button" onClick={() => setAmount(equalShare(outstandingThb, n).toFixed(2))} className="h-11 min-w-11 px-3 rounded-xl border border-border bg-white font-bold cursor-pointer">
+            {n}
+          </button>
+        ))}
+        <span className="text-xs text-muted-foreground">The last guest pays any odd satang.</span>
       </div>
       {change !== null && Number.isFinite(change) && (
         <Banner tone={change >= 0 ? 'ok' : 'warn'}>{change >= 0 ? `Change to give: ${formatThb(change)}` : `That is ${formatThb(-change)} short of the amount.`}</Banner>

@@ -1,9 +1,9 @@
 # Hotel Breakfast 2 - where it stands
 
-Updated 8 Oct 2026, after an audit of the layout, services and permissions. 358 tests pass, the
-typecheck is clean, and `npm run build` succeeds. The Firestore rules, orders included, were
-published on 8 Oct; the five rule changes since are not yet. The code is on GitHub `main`; none of
-it is deployed to the app staff open.
+Updated 8 Oct 2026, after an audit of the layout, services and permissions and a survey of
+open-source restaurant systems. 383 tests pass, the typecheck is clean, and `npm run build`
+succeeds. The Firestore rules, orders included, were published on 8 Oct; the seven rule changes
+since are not yet. None of it is deployed to the app staff open.
 
 ## Done in the 7 Oct audit
 
@@ -87,12 +87,34 @@ log is readable by managers only, as the screen that shows it always was.
 from the kitchen screen's new Sold out list - and each change goes to the audit log. Administrators
 keep only data maintenance.
 
+## Borrowed from open-source restaurant systems (8 Oct 2026)
+
+Every one of the 1,868 repositories under GitHub's `restaurant-management` topic was listed and
+tallied, and the 33 strongest read (TastyIgniter, URY and its Mosaic KDS, FloCafe, POSR,
+Satisfecho, OpenResto, Kasirku and others). Half the list is food-delivery apps and their clones.
+What fitted a hotel restaurant was built, with tests and a preview page each:
+
+| Borrowed | From | Where |
+|---|---|---|
+| Reservations and a waiting list | TastyIgniter, OpenResto, Satisfecho, HotPlate | Door → Bookings, both hotels |
+| A Ready stage on the kitchen screen, and a chime for new tickets | URY Mosaic, FloCafe, POSR, Satisfecho | Kitchen; Orders shows "ready to serve" |
+| Counting the cash drawer against the day's cash payments | URY, POSR | Orders → Count drawer; Sales lists the counts |
+| Bills left open from earlier days | URY's operational alerts | a warning on Orders |
+| Splitting what is left equally | FloCafe | Take payment |
+| Voids, discounts, comps and cancellations per person | URY, POSR | Sales → By staff |
+
+Left out, and why: guest QR ordering, online payments and delivery (public write access, payment
+contracts, couriers); inventory, recipes and costing (no stock data or purchasing process to
+feed them); priced modifiers (the menu prints none); a Thai interface (a project of its own);
+loyalty (Accor ALL does it). The two new paths, `bookings` and `cashCounts`, are in
+`firestore.rules` and need publishing with the rest.
+
 ## Waiting on the owner
 
 | | Why |
 |---|---|
 | **Publish the new app** where staff open it - AI Studio / Cloud Run | Firebase Hosting is not available on the Starter Tier, and GitHub does not update the live app |
-| **Publish `firestore.rules`** (FIREBASE_SETUP.md section 1) - paste and Publish in the console | five changes: two narrower, and the three the owner decided on 8 Oct; Claude's console attempt was stopped by its safety check |
+| **Publish `firestore.rules`** (FIREBASE_SETUP.md section 1) - paste and Publish in the console | seven changes: two narrower, the three the owner decided on 8 Oct, and the new `bookings` and `cashCounts`; Claude's console attempt was stopped by its safety check |
 | **Grant manager roles** (`scripts/setClaims.ts`) | nobody has one yet, so the Opera import, the floor plan, discounts, comps, reopening a bill and voiding a served dish need an owner account |
 | **Approve deleting the dead files** (below) | the deletion was blocked by a safety check; they are unimported and excluded from the build |
 | Admin key for `scripts/` (FIREBASE_SETUP.md) | roles beyond staff, and unattended imports |

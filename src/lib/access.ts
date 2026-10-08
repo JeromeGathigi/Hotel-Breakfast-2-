@@ -13,8 +13,8 @@
  *            settings, audit log; on a Food Exchange bill: discounts, complimentary payments,
  *            removing a payment, voiding a dish already served, reopening a closed bill;
  *            everything below
- *   staff    the door (check-in, corrections, seating) and Food Exchange orders, kitchen and
- *            menu, including marking a dish sold out
+ *   staff    the door (check-in, bookings, corrections, seating) and Food Exchange orders,
+ *            kitchen and menu, including marking a dish sold out and counting the cash drawer
  *   none     signed in but not authorised - sees an explanation, nothing else
  *
  * On 8 Oct 2026 the owner moved the Opera import and the floor plan from administrators to
@@ -80,7 +80,8 @@ export const ROLE_LABEL: Record<Role, string> = {
 export const ROLE_DUTIES: Record<Exclude<Role, 'none'>, string[]> = {
   staff: [
     'Check-in, group check-in, corrections to a room for today, seating, clearing and merging tables',
-    'Food Exchange (Novotel): orders, the kitchen screen and the menu; voiding a dish not yet served; payments by cash, card, QR or room charge; closing a bill; marking a dish sold out',
+    'Bookings: reservations and the waiting list, seating them, no-shows and cancellations',
+    'Food Exchange (Novotel): orders, the kitchen screen and the menu; voiding a dish not yet served; payments by cash, card, QR or room charge; closing a bill; marking a dish sold out; counting the cash drawer',
   ],
   manager: [
     "The morning's Opera imports",

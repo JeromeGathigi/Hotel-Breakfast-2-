@@ -6,6 +6,7 @@ import { dateTimeInBangkok } from '../lib/dates';
 import { formatBusinessDateDisplay } from '../lib/businessDate';
 import { PAYMENT_LABEL, channelLabel, formatThb, orderTotals, type PaymentMethod } from './orderModel';
 import { summariseOrders } from './orderReports';
+import { describeDifference } from './cashCount';
 import type { OrdersStore } from './store';
 import { REPORT_STYLE, esc, printHtml } from './printTicket';
 
@@ -66,7 +67,8 @@ export const SalesView: React.FC<{
        <h2>Items</h2><table>${rows(s.byItem.map((i) => [`${i.qty} × ${i.name}`, i.netThb]))}</table>
        <h2>Voids</h2><table>${rows(s.voids.map((v) => [`${v.orderNumber} · ${v.qty} × ${v.item}${v.served ? ' · after serving' : ''} · ${v.reason}`, v.netThb]))}</table>
        <h2>Cancelled orders</h2><table>${rows(s.cancellations.map((c) => [`${c.orderNumber} · ${c.reason} · ${c.by}`, '']))}</table>
-       <h2>Still open</h2><table>${rows(s.stillOpen.map((o) => [`${o.orderNumber} · ${o.where}`, o.outstandingThb]))}</table>`,
+       <h2>Still open</h2><table>${rows(s.stillOpen.map((o) => [`${o.orderNumber} · ${o.where}`, o.outstandingThb]))}</table>
+       <h2>Cash drawer counts</h2><table>${rows(store.cashCounts.map((c) => [`${c.businessDate} ${dateTimeInBangkok(c.countedAt).slice(-5)} · ${c.countedBy} · expected ${c.expectedThb.toFixed(2)} · ${describeDifference(c.differenceThb)}${c.note ? ` · ${c.note}` : ''}`, c.countedThb]))}</table>`,
       REPORT_STYLE
     );
   };
@@ -199,21 +201,79 @@ export const SalesView: React.FC<{
               </ul>
             )}
           </div>
-          <div>
-            <h3 className="font-bold mb-2">By staff</h3>
-            <ul className="text-sm space-y-1 tabular-nums">
-              {s.byStaff.map((p) => (
-                <li key={p.email} className="flex justify-between gap-2">
-                  <span className="truncate">{p.email}</span>
-                  <span className="text-muted-foreground">
-                    opened {p.opened} · closed {p.closed} · <span className="font-semibold text-foreground">{formatThb(p.revenueThb)}</span>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
         </section>
       </div>
+
+      <section className="bg-white rounded-2xl border border-border overflow-x-auto">
+        <h3 className="font-bold p-4 pb-0">Cash drawer counts</h3>
+        {store.cashCounts.length === 0 ? (
+          <p className="p-4 text-sm text-muted-foreground">No count recorded for these days. Staff count the drawer from Orders.</p>
+        ) : (
+          <table className="w-full text-sm tabular-nums mt-2">
+            <thead className="bg-[#F2EBE4]/60 text-left label-mono">
+              <tr>
+                <th className="p-3">When</th>
+                <th className="p-3">By</th>
+                <th className="p-3 text-right">Float</th>
+                <th className="p-3 text-right">Cash taken</th>
+                <th className="p-3 text-right">Counted</th>
+                <th className="p-3">Difference</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {store.cashCounts.map((c) => (
+                <tr key={c.id}>
+                  <td className="p-3 whitespace-nowrap">{dateTimeInBangkok(c.countedAt)}</td>
+                  <td className="p-3 max-w-[14rem] truncate">{c.countedBy}</td>
+                  <td className="p-3 text-right">{formatThb(c.floatThb)}</td>
+                  <td className="p-3 text-right">{formatThb(c.cashTakenThb)}</td>
+                  <td className="p-3 text-right font-semibold">{formatThb(c.countedThb)}</td>
+                  <td className={`p-3 ${c.differenceThb === 0 ? 'text-emerald-800' : 'text-rose-800 font-semibold'}`}>
+                    {describeDifference(c.differenceThb)}
+                    {c.note ? <span className="block text-xs text-muted-foreground font-normal">{c.note}</span> : null}
+                    {c.openBills > 0 ? <span className="block text-xs text-muted-foreground font-normal">{c.openBills} bill{c.openBills === 1 ? '' : 's'} still open when counted</span> : null}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
+
+      {s.byStaff.length > 0 && (
+        <section className="bg-white rounded-2xl border border-border overflow-x-auto">
+          <h3 className="font-bold p-4 pb-0">By staff</h3>
+          <p className="px-4 text-xs text-muted-foreground">Revenue each person closed, and the exceptions a manager reviews: voids, discounts and comps they gave, orders they cancelled.</p>
+          <table className="w-full text-sm tabular-nums mt-2">
+            <thead className="bg-[#F2EBE4]/60 text-left label-mono">
+              <tr>
+                <th className="p-3">Person</th>
+                <th className="p-3 text-right">Opened</th>
+                <th className="p-3 text-right">Closed</th>
+                <th className="p-3 text-right">Revenue</th>
+                <th className="p-3 text-right">Voids</th>
+                <th className="p-3 text-right">Discounts</th>
+                <th className="p-3 text-right">Comps</th>
+                <th className="p-3 text-right">Cancelled</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {s.byStaff.map((p) => (
+                <tr key={p.email}>
+                  <td className="p-3 max-w-[16rem] truncate">{p.email}</td>
+                  <td className="p-3 text-right">{p.opened}</td>
+                  <td className="p-3 text-right">{p.closed}</td>
+                  <td className="p-3 text-right font-semibold">{formatThb(p.revenueThb)}</td>
+                  <td className="p-3 text-right">{p.voids ? `${p.voids} · ${formatThb(p.voidThb)}` : '—'}</td>
+                  <td className="p-3 text-right">{p.discounts ? `${p.discounts} · ${formatThb(p.discountThb)}` : '—'}</td>
+                  <td className="p-3 text-right">{p.comps ? `${p.comps} · ${formatThb(p.compThb)}` : '—'}</td>
+                  <td className="p-3 text-right">{p.cancelled || '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
 
       {(s.voids.length > 0 || s.cancellations.length > 0) && (
         <section className="bg-white rounded-2xl border border-border p-4 space-y-2">

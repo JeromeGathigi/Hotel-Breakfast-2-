@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   BarChart3,
+  CalendarClock,
   ChefHat,
   Clock,
   ExternalLink,
@@ -33,6 +34,7 @@ import { navGroups, navItem, type View } from '../navigation';
 
 const ICON: Record<View, React.ReactNode> = {
   door: <UserCheck size={18} />,
+  bookings: <CalendarClock size={18} />,
   floor: <LayoutGrid size={18} />,
   orders: <ReceiptText size={18} />,
   kitchen: <ChefHat size={18} />,

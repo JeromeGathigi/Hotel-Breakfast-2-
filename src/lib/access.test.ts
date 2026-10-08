@@ -112,6 +112,16 @@ describe('the app and firestore.rules agree', () => {
     expect(rules.match(/allow [a-z, ]+: if isAdmin\(\);/g)).toEqual(['allow delete: if isAdmin();']);
   });
 
+  it('keeps bookings and cash counts as history: written as yourself, never deleted', () => {
+    const bookings = rules.slice(rules.indexOf('match /bookings/'), rules.indexOf('match /counters/'));
+    expect(bookings).toMatch(/allow create: if isStaff\(\)\s*&& request\.resource\.data\.createdBy == claims\(\)\.get\('email', ''\)/);
+    expect(bookings).toContain('request.resource.data.log[0:resource.data.log.size()] == resource.data.log');
+    expect(bookings).toMatch(/allow delete: if false;/);
+    const counts = rules.slice(rules.indexOf('match /cashCounts/'), rules.indexOf('match /bookings/'));
+    expect(counts).toMatch(/allow create: if isStaff\(\) && writtenAsSelf\('countedBy'\);/);
+    expect(counts).toMatch(/allow update, delete: if false;/);
+  });
+
   it('has no catch-all match', () => {
     expect(rules).not.toMatch(/\{allChildren=\*\*\}/);
   });

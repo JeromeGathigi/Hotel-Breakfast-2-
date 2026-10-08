@@ -22,6 +22,7 @@ import {
   setDiscount,
   setHeldQty,
   voidLine,
+  withKitchen,
   type Order,
   type OrderLine,
 } from './orderModel';
@@ -40,6 +41,7 @@ import { printBill, printKitchenTicket } from './printTicket';
 const LINE_STATUS: Record<OrderLine['status'], { label: string; cls: string }> = {
   held: { label: 'Not sent', cls: 'bg-amber-100 text-amber-900' },
   sent: { label: 'In kitchen', cls: 'bg-sky-100 text-sky-900' },
+  ready: { label: 'Ready - serve it', cls: 'bg-lime-300 text-lime-950' },
   served: { label: 'Served', cls: 'bg-emerald-100 text-emerald-900' },
   void: { label: 'Void', cls: 'bg-slate-200 text-slate-600 line-through' },
 };
@@ -182,6 +184,7 @@ export const OrderPanel: React.FC<{ order: Order; store: OrdersStore; manager: b
               {l.note && <p className="text-sm font-bold text-rose-800">Note: {l.note}</p>}
               {l.status === 'void' && <p className="text-xs text-muted-foreground">Voided: {l.voidReason}</p>}
               {l.status === 'sent' && l.sentAt && <p className="text-xs text-muted-foreground">Sent {timeInBangkok(l.sentAt)}</p>}
+              {l.status === 'ready' && <p className="text-xs font-bold text-lime-900">Up at the pass since {timeInBangkok(l.readyAt ?? l.sentAt)}</p>}
             </div>
             <span className={`text-xs font-bold uppercase rounded-md px-2 py-1 ${LINE_STATUS[l.status].cls}`}>{LINE_STATUS[l.status].label}</span>
             <span className="w-24 text-right tabular-nums font-semibold">{formatThb(l.unitPriceThb * l.qty)}</span>
@@ -195,13 +198,13 @@ export const OrderPanel: React.FC<{ order: Order; store: OrdersStore; manager: b
                 </button>
               </span>
             )}
-            {open && l.status === 'sent' && (
-              <button className={btn.quiet} onClick={() => run((o, a) => markServed(o, [l.lineId], a))} disabled={busy}>
+            {open && withKitchen(l) && (
+              <button className={l.status === 'ready' ? btn.secondary : btn.quiet} onClick={() => run((o, a) => markServed(o, [l.lineId], a))} disabled={busy}>
                 Served
               </button>
             )}
             {/* A dish the guest has had comes off the bill only on a manager's say-so, as a comp does. */}
-            {open && (l.status === 'sent' || (l.status === 'served' && manager)) && (
+            {open && (withKitchen(l) || (l.status === 'served' && manager)) && (
               <button className={btn.quiet} onClick={() => setDialog({ kind: 'void', line: l })} disabled={busy}>
                 Void
               </button>

@@ -133,6 +133,28 @@ service cloud.firestore {
           ));
         allow delete: if false;
       }
+      // Cash drawer counts against the day's cash payments: added, never edited or removed - a
+      // recount is another record.
+      match /cashCounts/{countId} {
+        allow read: if isStaff();
+        allow create: if isStaff() && writtenAsSelf('countedBy');
+        allow update, delete: if false;
+      }
+      // Reservations and the waiting list. Written as the signed-in account, the history only
+      // grows, and a booking is never deleted - it is cancelled, marked a no-show, or the party
+      // leaves the list.
+      match /bookings/{bookingId} {
+        allow read: if isStaff();
+        allow create: if isStaff()
+          && request.resource.data.createdBy == claims().get('email', '')
+          && writtenAsSelf('updatedBy');
+        allow update: if isStaff()
+          && writtenAsSelf('updatedBy')
+          && request.resource.data.createdBy == resource.data.createdBy
+          && request.resource.data.log.size() > resource.data.log.size()
+          && request.resource.data.log[0:resource.data.log.size()] == resource.data.log;
+        allow delete: if false;
+      }
       // Per-day order numbers, taken in the same transaction as the new order.
       match /counters/{counterId} {
         allow read: if isStaff();

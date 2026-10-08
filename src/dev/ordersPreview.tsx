@@ -7,6 +7,7 @@ import type { Guest } from '../types';
 import type { Role } from '../lib/access';
 import { addItem, addPayment, closeOrder, openOrder, sendToKitchen, OrderError, type Order } from '../orders/orderModel';
 import type { NewOrderInput, OrderOp, OrdersStore } from '../orders/store';
+import type { CashCount } from '../orders/cashCount';
 import { OrdersView } from '../orders/OrdersView';
 import { KitchenView } from '../orders/KitchenView';
 import { SalesView } from '../orders/SalesView';
@@ -54,14 +55,21 @@ function seed(): Order[] {
   let c = openOrder({ hotelId: 'novotel', businessDate: today, seq: 3, channel: 'room', roomNumber: '412', guestName: 'PREVIEW GUEST 412', resvNameId: 'P412', covers: 1 }, actor(18));
   c = addItem(c, KHAO_SOY, 1, '', actor(17));
   c = sendToKitchen(c, actor(17));
-  return [c, b, a];
+
+  // Left open yesterday: shows the "bills from earlier days" warning.
+  let y = openOrder({ hotelId: 'novotel', businessDate: addDays(today, -1), seq: 9, channel: 'table', tableId: t[5].id, tableNumber: t[5].tableNumber, covers: 2 }, actor(1300));
+  y = addItem(y, PIZZA, 1, '', actor(1299));
+  y = sendToKitchen(y, actor(1299));
+  return [c, b, a, y];
 }
 
 function useMemoryStore(): OrdersStore {
   const [orders, setOrders] = useState<Order[]>(seed);
   const [soldOut, setSoldOut] = useState<string[]>(['from-the-grill-3']);
+  const [cashCounts, setCashCounts] = useState<CashCount[]>([]);
   return useMemo<OrdersStore>(
     () => ({
+      hotelId: 'novotel',
       orders,
       loading: false,
       errors: {},
@@ -84,10 +92,17 @@ function useMemoryStore(): OrdersStore {
       async setSoldOut(ids: string[]) {
         setSoldOut(ids);
       },
+      cashCounts,
+      async saveCashCount(count: CashCount) {
+        setCashCounts((prev) => [count, ...prev]);
+      },
     }),
-    [orders, soldOut]
+    [orders, soldOut, cashCounts]
   );
 }
+
+/** What a screen's Firestore query for one business day would return. */
+const onDay = (store: OrdersStore, day: string): OrdersStore => ({ ...store, orders: store.orders.filter((o) => o.businessDate === day) });
 
 function Preview() {
   const store = useMemoryStore();
@@ -111,9 +126,18 @@ function Preview() {
           </select>
         </label>
       </div>
-      {screen === 'orders' && <OrdersView store={store} role={role} date={date} today={today} onDateChange={setDate} />}
-      {screen === 'kitchen' && <KitchenView store={store} canMarkSoldOut={role !== 'none'} />}
-      {screen === 'sales' && <SalesView store={store} from={today} to={today} today={today} onRangeChange={() => undefined} />}
+      {screen === 'orders' && (
+        <OrdersView
+          store={onDay(store, date)}
+          role={role}
+          date={date}
+          today={today}
+          onDateChange={setDate}
+          staleOpen={store.orders.filter((o) => o.status === 'open' && o.businessDate < today)}
+        />
+      )}
+      {screen === 'kitchen' && <KitchenView store={onDay(store, today)} canMarkSoldOut={role !== 'none'} />}
+      {screen === 'sales' && <SalesView store={onDay(store, today)} from={today} to={today} today={today} onRangeChange={() => undefined} />}
     </div>
   );
 }

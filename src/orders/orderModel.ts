@@ -15,8 +15,15 @@ import { MENU_SOURCE } from '../data/foodExchangeMenu';
 
 export type OrderChannel = 'table' | 'room' | 'takeaway';
 export type OrderStatus = 'open' | 'complete' | 'cancelled';
-/** held = taken but not yet sent to the kitchen; void = sent, then taken off the bill with a reason. */
-export type LineStatus = 'held' | 'sent' | 'served' | 'void';
+/**
+ * held = taken but not yet sent to the kitchen; sent = being cooked; ready = cooked and waiting at
+ * the pass; served = at the table; void = sent, then taken off the bill with a reason.
+ *
+ * "Ready" is the kitchen-display stage the restaurant systems surveyed on 8 Oct 2026 share (URY
+ * Mosaic, FloCafe, POSR): the kitchen bumps a dish when it is up, and the waiter sees it is waiting
+ * instead of the kitchen marking it served before anyone has carried it out.
+ */
+export type LineStatus = 'held' | 'sent' | 'ready' | 'served' | 'void';
 export type PaymentMethod = 'cash' | 'card' | 'qr' | 'room' | 'comp';
 
 export const PAYMENT_LABEL: Record<PaymentMethod, string> = {
@@ -48,8 +55,13 @@ export interface OrderLine {
   addedAt: string;
   addedBy: string;
   sentAt: string | null;
+  /** When the kitchen bumped it. Absent on lines from before the ready stage existed. */
+  readyAt?: string | null;
   servedAt: string | null;
   voidReason: string | null;
+  /** Who voided it, and when - for the staff report. Absent on lines voided before 8 Oct 2026. */
+  voidedBy?: string | null;
+  voidedAt?: string | null;
 }
 
 export interface OrderPayment {
@@ -79,6 +91,7 @@ export type OrderAction =
   | 'item-changed'
   | 'item-removed'
   | 'items-sent'
+  | 'items-ready'
   | 'items-served'
   | 'item-voided'
   | 'discount-set'
@@ -196,6 +209,18 @@ export function orderTotals(order: Pick<Order, 'lines' | 'discount' | 'payments'
     outstandingThb: baht(Math.max(0, total - paid)),
     heldCount: order.lines.filter((l) => l.status === 'held').length,
   };
+}
+
+/**
+ * One guest's share when what is left is split between `ways` people: rounded down to the satang,
+ * so the last guest pays the odd satang and the bill always closes exactly (FloCafe's "collect
+ * equal shares", from the systems surveyed on 8 Oct 2026). 100.00 three ways is 33.33, then 33.33,
+ * then 33.34.
+ */
+export function equalShare(outstandingThb: number, ways: number): number {
+  const n = Math.max(1, Math.floor(ways));
+  const left = satang(Math.max(0, outstandingThb));
+  return n === 1 ? baht(left) : baht(Math.floor(left / n));
 }
 
 export const formatThb = (thb: number) =>
@@ -389,24 +414,38 @@ export function sendToKitchen(order: Order, actor: Actor): Order {
   });
 }
 
-export function markServed(order: Order, lineIds: string[], actor: Actor): Order {
+/** The kitchen has it: being cooked, or cooked and waiting at the pass. */
+export const withKitchen = (l: Pick<OrderLine, 'status'>) => l.status === 'sent' || l.status === 'ready';
+
+/** The kitchen bumps dishes that are up. Only dishes being cooked can become ready. */
+export function markReady(order: Order, lineIds: string[], actor: Actor): Order {
   requireActor(actor);
   const ids = new Set(lineIds);
-  const served = order.lines.filter((l) => ids.has(l.lineId) && l.status === 'sent');
-  if (served.length === 0) return order;
-  return next(order, actor, 'items-served', served.map((l) => `${l.qty} × ${l.name}`).join(', '), {
-    lines: order.lines.map((l) => (ids.has(l.lineId) && l.status === 'sent' ? { ...l, status: 'served' as const, servedAt: actor.at } : l)),
+  const ready = order.lines.filter((l) => ids.has(l.lineId) && l.status === 'sent');
+  if (ready.length === 0) return order;
+  return next(order, actor, 'items-ready', ready.map((l) => `${l.qty} × ${l.name}`).join(', '), {
+    lines: order.lines.map((l) => (ids.has(l.lineId) && l.status === 'sent' ? { ...l, status: 'ready' as const, readyAt: actor.at } : l)),
   });
 }
 
-/** Sent or served items leave the bill only this way, with a reason that stays on the order. */
+/** At the table - from the pass, or straight from the kitchen when nobody bumped it first. */
+export function markServed(order: Order, lineIds: string[], actor: Actor): Order {
+  requireActor(actor);
+  const ids = new Set(lineIds);
+  const served = order.lines.filter((l) => ids.has(l.lineId) && withKitchen(l));
+  if (served.length === 0) return order;
+  return next(order, actor, 'items-served', served.map((l) => `${l.qty} × ${l.name}`).join(', '), {
+    lines: order.lines.map((l) => (ids.has(l.lineId) && withKitchen(l) ? { ...l, status: 'served' as const, servedAt: actor.at } : l)),
+  });
+}
+
 /** Net THB of the dishes on this order voided after they were served. */
 export const servedVoidThb = (order: Pick<Order, 'servedVoidThb'>) => order.servedVoidThb ?? 0;
 
 /**
- * Takes a dish off the bill. Not yet sent: it is simply removed. Sent but not served: anyone, with
- * a reason. Already served: a manager, with a reason - enforced by the UI and by the security
- * rules through servedVoidThb, as a comp is through compThb.
+ * Takes a dish off the bill. Not yet sent: it is simply removed. Sent or ready but not served:
+ * anyone, with a reason. Already served: a manager, with a reason - enforced by the UI and by the
+ * security rules through servedVoidThb, as a comp is through compThb.
  */
 export function voidLine(order: Order, lineId: string, reason: string, actor: Actor): Order {
   requireActor(actor);
@@ -418,7 +457,7 @@ export function voidLine(order: Order, lineId: string, reason: string, actor: Ac
   if (!why) throw new OrderError('Give a reason for voiding an item the kitchen has already had.');
   const served = line.status === 'served';
   return next(order, actor, 'item-voided', `${line.qty} × ${line.name}${served ? ' (already served)' : ''}: ${why}`, {
-    lines: order.lines.map((l) => (l.lineId === lineId ? { ...l, status: 'void' as const, voidReason: why } : l)),
+    lines: order.lines.map((l) => (l.lineId === lineId ? { ...l, status: 'void' as const, voidReason: why, voidedBy: actor.by, voidedAt: actor.at } : l)),
     ...(served ? { servedVoidThb: Math.round((servedVoidThb(order) + line.unitPriceThb * line.qty) * 100) / 100 } : {}),
   });
 }
@@ -511,7 +550,7 @@ export function cancelOrder(order: Order, reason: string, actor: Actor): Order {
   const why = reason.trim();
   if (!why) throw new OrderError('Give a reason for cancelling.');
   if (order.payments.length > 0) throw new OrderError('This order has payments on it. A manager must remove them before it can be cancelled.');
-  if (order.lines.some((l) => l.status === 'sent' || l.status === 'served')) {
+  if (order.lines.some((l) => withKitchen(l) || l.status === 'served')) {
     throw new OrderError('The kitchen has items for this order. Void them with a reason first, so the waste is recorded.');
   }
   return next(order, actor, 'order-cancelled', why, { status: 'cancelled', cancelReason: why, closedAt: actor.at, closedBy: actor.by });
