@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Database, KeyRound, ListChecks, ScrollText, Search, Shield, Trash2 } from 'lucide-react';
+import { Database, Download, KeyRound, ListChecks, ScrollText, Search, Shield, Trash2 } from 'lucide-react';
 import { collection, db, doc, limit, onSnapshot, orderBy, query } from '../firebase';
 import type { AuditLogEntry, ReportMetadata } from '../types';
 import type { PackageIndex } from '../parsing/packageDetail';
@@ -7,8 +7,9 @@ import { useDoorData } from '../door/useDoorData';
 import { buildDoorRooms } from '../door/doorModel';
 import { assessBreakfast, PROPERTY_BREAKFAST_CODES } from '../lib/meals';
 import { lookupRate } from '../lib/rateReferential';
-import { OWNER_ADMIN_EMAILS, ROLE_LABEL, STAFF_EMAIL_DOMAIN, type Role } from '../lib/access';
+import { OWNER_ADMIN_EMAILS, ROLE_DUTIES, ROLE_LABEL, STAFF_EMAIL_DOMAIN, canMaintainData, type Role } from '../lib/access';
 import { dateTimeInBangkok } from '../lib/dates';
+import { downloadCsv, toCsv } from '../lib/csv';
 import { purgeJunk, scanForJunk, type MaintenanceScan } from '../lib/maintenance';
 import { Banner, Modal, btn } from './ui';
 import { VipLegend } from './VipLegend';
@@ -27,7 +28,7 @@ export const Settings: React.FC<{ hotelId: string; today: string; role: Role }> 
     ['rates', 'Rate codes', <ListChecks size={16} key="r" />],
     ['audit', 'Audit log', <ScrollText size={16} key="a" />],
     ['access', 'Access', <KeyRound size={16} key="k" />],
-    ...(role === 'admin' ? ([['maintenance', 'Data maintenance', <Trash2 size={16} key="m" />]] as Array<[Tab, string, React.ReactNode]>) : []),
+    ...(canMaintainData(role) ? ([['maintenance', 'Data maintenance', <Trash2 size={16} key="m" />]] as Array<[Tab, string, React.ReactNode]>) : []),
   ];
   return (
     <div className="space-y-4">
@@ -46,7 +47,7 @@ export const Settings: React.FC<{ hotelId: string; today: string; role: Role }> 
       {tab === 'rates' && <RateCodes hotelId={hotelId} today={today} />}
       {tab === 'audit' && <AuditLog hotelId={hotelId} />}
       {tab === 'access' && <Access role={role} />}
-      {tab === 'maintenance' && role === 'admin' && <Maintenance hotelId={hotelId} today={today} />}
+      {tab === 'maintenance' && canMaintainData(role) && <Maintenance hotelId={hotelId} today={today} />}
     </div>
   );
 };
@@ -105,6 +106,11 @@ function RateCodes({ hotelId, today }: { hotelId: string; today: string }) {
   }
   const [lookup, setLookup] = useState('');
   const code = lookup.trim().toUpperCase();
+  const exportCsv = () =>
+    downloadCsv(
+      `${hotelId}-rates-to-confirm-${today}.csv`,
+      toCsv(['Room', 'Guest', 'Rate code', 'Block', 'Why it needs checking'], flagged.map((r) => [r.guest.roomNumber, r.guest.guestName, r.guest.rateCode ?? '', r.guest.blockCode ?? '', r.breakfast.reason]))
+    );
   const info = code ? lookupRate(code) : null;
   const verdict = code ? assessBreakfast(code) : null;
 
@@ -133,7 +139,12 @@ function RateCodes({ hotelId, today }: { hotelId: string; today: string }) {
       </div>
 
       <div className="bg-white rounded-2xl border border-border p-5 space-y-3">
-        <h3 className="font-bold">Rooms the app cannot confirm today</h3>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="font-bold">Rooms the app cannot confirm today</h3>
+          <button className={btn.secondary} onClick={exportCsv} disabled={flagged.length === 0}>
+            <Download size={16} /> Export CSV
+          </button>
+        </div>
         {data.loading ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : flagged.length === 0 ? (
@@ -200,17 +211,25 @@ function Access({ role }: { role: Role }) {
       <p className="flex items-center gap-2 text-base">
         <Shield size={18} /> Your role: <strong>{ROLE_LABEL[role]}</strong>
       </p>
-      <ul className="list-disc pl-5 space-y-1">
-        <li>
-          <strong>Host stand</strong> - check-in, corrections, floor plan, menu. Every verified @{STAFF_EMAIL_DOMAIN} account has it.
-        </li>
-        <li>
-          <strong>Manager</strong> - plus the manifest, forecast, analytics and these settings.
-        </li>
-        <li>
-          <strong>Administrator</strong> - plus Opera imports, floor-plan editing and data maintenance. Owner accounts: {OWNER_ADMIN_EMAILS.join(', ')}.
-        </li>
-      </ul>
+      <dl className="space-y-3">
+        {(['staff', 'manager', 'admin'] as const).map((r) => (
+          <div key={r}>
+            <dt className="font-bold">
+              {ROLE_LABEL[r]}
+              {r !== 'staff' && <span className="font-normal text-muted-foreground"> - everything above, plus</span>}
+            </dt>
+            <dd>
+              <ul className="list-disc pl-5 space-y-0.5">
+                {ROLE_DUTIES[r].map((d) => (
+                  <li key={d}>{d}</li>
+                ))}
+              </ul>
+              {r === 'staff' && <p className="text-muted-foreground mt-1">Every verified @{STAFF_EMAIL_DOMAIN} account has it.</p>}
+              {r === 'admin' && <p className="text-muted-foreground mt-1">Owner accounts: {OWNER_ADMIN_EMAILS.join(', ')}.</p>}
+            </dd>
+          </div>
+        ))}
+      </dl>
       <p>
         Roles other than the domain default are granted by an administrator with <code className="font-mono-custom">scripts/setClaims.ts</code> (needs a Firebase service account on the back-office PC). The person signs out and in again, or presses "Check again", to pick it up.
       </p>

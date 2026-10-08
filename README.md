@@ -12,13 +12,19 @@ static hosting, and the Opera imports run in the browser or from `scripts/` with
 
 | Role | How someone gets it | Screens |
 |---|---|---|
-| Staff | a verified `@accor.com` Google account, or a `role: staff` claim | Check-in, Floor plan; at Novotel also the Food Exchange menu, Orders and Kitchen |
-| Manager | `role: manager` claim | + In-house manifest, Meal forecast, Analytics, Sales (Novotel), Settings; discounts, comps, sold-out dishes, reopening a closed bill |
-| Admin | `role: admin` claim, or an owner account in `src/lib/access.ts` | + Import & export, floor-plan editing, Settings → Data maintenance |
+| Staff | a verified `@accor.com` Google account, or a `role: staff` claim | **Door**: Check-in, Floor plan (seating, clearing, merging). At Novotel, **Food Exchange**: Orders, Kitchen, Menu |
+| Manager | `role: manager` claim | + **Management**: In-house manifest, Meal forecast, Breakfast analytics, Food Exchange sales (Novotel), and their CSV exports; Settings. On a bill: discounts, comps, removing a payment, voiding a dish already served, reopening a closed bill, marking dishes sold out |
+| Admin | `role: admin` claim, or an owner account in `src/lib/access.ts` | + **Administration**: Opera import, floor-plan editing, Settings → Data maintenance |
 
 `firestore.rules` enforces the same roles; hiding a screen is not the protection.
 `src/lib/access.test.ts` fails if the app and the rules drift apart. Claims are set with
 `scripts/setClaims.ts`.
+
+The sidebar is defined once, in `src/navigation.ts`, and `src/navigation.test.ts` pins down what
+each role sees at each property. On phones and upright tablets the sidebar sits behind a menu
+button. The screen is in the address (`…/#kitchen`), so a kitchen display can be bookmarked, and
+each device remembers which property it works for. `/dev/shell-preview.html` shows the frame for
+any role without signing in.
 
 ## How breakfast is decided
 
@@ -47,8 +53,9 @@ and adapted to the hotel:
 - **Orders** - open an order for a table, an in-house room or takeaway; add dishes from the menu
   with a note for the kitchen (allergies); send them; take payments - cash, card, QR, charged to an
   in-house room, or complimentary - split across methods; close. Order numbers restart daily
-  (`FX-001`). Items the kitchen has seen are voided with a reason, never deleted, and every action
-  is kept on the order with who did it.
+  (`FX-001`). Items the kitchen has seen are voided with a reason, never deleted - a dish already
+  served only by a manager, since taking it off the bill is a comp - and every action is kept on
+  the order with who did it.
 - **Kitchen** - everything sent and not yet served, oldest first, with how long it has waited.
 - **Sales** (managers) - revenue, covers, service charge and VAT, discounts and comps, payment
   mix, items, hours, staff, voids and cancellations, and the room charges to post to Opera; CSV
@@ -67,7 +74,7 @@ memory).
 
 1. Export from Opera, for each hotel: **Guests INH - By Room** (Delimited Data → Tab) and the
    **package forecast**.
-2. In the app, **Import & export**: import the guest list, then the forecast. Every import is
+2. In the app, **Opera import** (administrators): import the guest list, then the forecast. Every import is
    previewed first. The wrong report or the wrong hotel is refused outright; anything unusual -
    yesterday's list, a list half the size of the last one, a file with no RESORT column - has to
    be ticked before the import runs.
@@ -77,6 +84,16 @@ memory).
 
 The door shows a banner when its list is not today's, and a pop-up when Opera's forecast and the
 list disagree by more than 5 covers or 10%, whichever is larger.
+
+A correction made at the door can be undone from the room's card, and a room marked "not occupied"
+by mistake can be put back from the banner listing them.
+
+## Exports
+
+Each CSV sits with the data it holds, for managers: the in-house list on **In-house manifest**,
+the forecast on **Meal forecast**, the rooms to confirm on **Settings → Rate codes**, check-ins for
+a range of days on **Breakfast analytics**, and orders and room charges on **Food Exchange
+sales**. Cells that start like a formula are written as text.
 
 Unattended alternative: `npm run opera:watch` imports whatever is dropped into `opera-incoming/`,
 with the same checks; anything that would need a tick is moved to `opera-rejected/` with the
@@ -137,8 +154,8 @@ Firestore database `ai-studio-hotelbreakfast2-acad9cf6-2960-4fc6-9358-4df6deffdf
 | `checkins/{date}/rooms/{id}` | one per room per service; breakfast is `{room}`, other services `{room}~{service}` | the door |
 | `overrides/{room}` | corrections made at the door; each applies to one reservation on one day | the door |
 | `tables/{id}`, `layouts/{id}` | the floor plan and live occupancy | admin (plan), staff (occupancy only) |
-| `auditLogs/{id}` | append-only, each entry written as its author | everyone |
-| `orders/{date-seq}` | Food Exchange orders, with their items, payments and history; never deleted | staff (discounts, comps, reopening: managers) |
+| `auditLogs/{id}` | append-only, each entry written as its author; read by managers (Settings) | everyone |
+| `orders/{date-seq}` | Food Exchange orders, with their items, payments and history; never deleted | staff (discounts, comps, removing a payment, voiding a served dish, reopening: managers) |
 | `counters/orders-{date}` | the day's last order number | staff, in the same transaction as the order |
 | `menuState/availability` | dishes marked sold out | managers |
 | `daily_summaries/{date}` | synthetic data from retired code; remove it in Settings → Data maintenance | nobody |

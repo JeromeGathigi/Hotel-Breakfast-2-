@@ -40,4 +40,6 @@ export interface DoorActions {
   checkIn(input: CheckInInput): Promise<WriteResult>;
   undoCheckIn(guest: Guest, service: MealServiceType, checkIn: CheckIn): Promise<WriteResult>;
   saveCorrection(input: CorrectionInput): Promise<WriteResult>;
+  /** Removes today's correction for a room: it goes back to what Opera's list says. */
+  clearCorrection(guest: Pick<Guest, 'roomNumber' | 'guestName'>): Promise<WriteResult>;
 }

@@ -18,6 +18,7 @@ import {
   getTurnoverStage, 
   getTurnoverStyle, 
   formatOccupiedDuration,
+  formatSeatedAt,
   TurnoverStage
 } from '../lib/turnover';
 import { 
@@ -1524,7 +1525,7 @@ export const RestaurantFloorPlan2D: React.FC<RestaurantFloorPlan2DProps> = ({
                           </span>
                           <span>•</span>
                           <span>
-                            Seated at: <strong className="text-foreground">{selectedTable.occupiedSince || 'Active'}</strong>
+                            Seated at: <strong className="text-foreground">{formatSeatedAt(selectedTable.occupiedSince) || '—'}</strong>
                           </span>
                           <span>•</span>
                           <span>

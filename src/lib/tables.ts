@@ -1,4 +1,16 @@
-import { DiningTable, TableLayoutEntry } from '../types';
+import { DiningTable, MealServiceType, TableLayoutEntry } from '../types';
+
+/**
+ * The occupancy a table carries while a party sits at it. These, with status and the two merge
+ * fields, are the only fields firestore.rules lets door staff change on a table.
+ */
+export const VACANT = {
+  occupiedByRoom: null,
+  occupiedByGuest: null,
+  occupiedPax: null,
+  occupiedSince: null,
+  mealService: null,
+} as const satisfies Partial<DiningTable>;
 
 /**
  * Natural sort comparison for table numbers (e.g., A1, A2, A10, BAR1, BAR2)
@@ -281,4 +293,31 @@ export function tableToLayoutEntry(table: DiningTable): TableLayoutEntry {
     mergedInto: table.mergedInto ?? null,
     mergedTables: table.mergedTables && table.mergedTables.length > 0 ? table.mergedTables : [],
   };
+}
+
+/**
+ * A status set by hand on the floor plan, for every table of a merged group - as seating and
+ * releasing at the door already were. Clearing only the table that was tapped used to leave the
+ * rest of its group occupied, and an occupied member blocks separating the group.
+ *
+ * Only 'occupied' keeps an occupant. Marking a table occupied by hand (a walk-in) starts its
+ * turnover clock now unless one is already running; any other status ends the occupancy.
+ */
+export function buildStatusChange(
+  table: DiningTable,
+  status: DiningTable['status'],
+  allTables: DiningTable[],
+  ctx: { now: string; service: MealServiceType }
+): Record<string, Partial<DiningTable>> {
+  const members = getMergedGroupMembers(table, allTables);
+  const primary = members.find((m) => !m.mergedInto) ?? table;
+  const update: Partial<DiningTable> =
+    status === 'occupied'
+      ? {
+          status,
+          occupiedSince: primary.status === 'occupied' && primary.occupiedSince ? primary.occupiedSince : ctx.now,
+          mealService: primary.mealService ?? ctx.service,
+        }
+      : { status, ...VACANT };
+  return Object.fromEntries(members.map((m) => [m.id, update]));
 }

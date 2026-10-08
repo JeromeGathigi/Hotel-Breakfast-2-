@@ -97,16 +97,18 @@ service cloud.firestore {
         allow write: if isAdmin();
       }
 
-      // Append-only, and an entry can only be written as yourself.
+      // Append-only, and an entry can only be written as yourself. Read in Settings, a manager's
+      // screen; every host writes entries but none reads them back.
       match /auditLogs/{logId} {
-        allow read: if isStaff();
+        allow read: if isManager();
         allow create: if isStaff() && writtenAsSelf('userEmail');
         allow update, delete: if false;
       }
 
       // A la carte orders (Food Exchange). Every change is written as the signed-in account, the
       // history can only grow, and an order is never deleted - it is cancelled with a reason.
-      // Discounts, complimentary amounts, removing a payment and reopening a closed bill are a
+      // Discounts, complimentary amounts, removing a payment, voiding a dish already served
+      // (servedVoidThb, absent on orders made before it existed) and reopening a closed bill are a
       // manager's call.
       match /orders/{orderId} {
         allow read: if isStaff();
@@ -124,6 +126,7 @@ service cloud.firestore {
           && (isManager() || (
             request.resource.data.discount == resource.data.discount
             && request.resource.data.compThb == resource.data.compThb
+            && request.resource.data.get('servedVoidThb', 0) == resource.data.get('servedVoidThb', 0)
             && request.resource.data.payments.size() >= resource.data.payments.size()
             && !(resource.data.status == 'complete' && request.resource.data.status == 'open')
           ));

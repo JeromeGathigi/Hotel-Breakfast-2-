@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import type { Role } from '../lib/access';
-import { useFirestoreOrders } from './firestoreOrders';
+import { MenuView } from '../components/MenuView';
+import { Banner } from '../components/ui';
+import { useFirestoreOrders, useSoldOut } from './firestoreOrders';
 import { OrdersView } from './OrdersView';
 import { KitchenView } from './KitchenView';
 import { SalesView } from './SalesView';
 
-/** The order screens, wired to Firestore. Lazy-loaded from App.tsx. */
+/** The Food Exchange screens, wired to Firestore. Lazy-loaded from App.tsx. */
 
 export function OrdersScreen({ hotelId, today, role }: { hotelId: string; today: string; role: Role }) {
   const [date, setDate] = useState(today);
@@ -16,12 +18,23 @@ export function OrdersScreen({ hotelId, today, role }: { hotelId: string; today:
 }
 
 export function KitchenScreen({ hotelId, today }: { hotelId: string; today: string }) {
-  const store = useFirestoreOrders(hotelId, today, today, today);
+  const store = useFirestoreOrders(hotelId, today, today, today, { guests: false, tables: false });
   return <KitchenView store={store} />;
 }
 
 export function SalesScreen({ hotelId, today }: { hotelId: string; today: string }) {
   const [range, setRange] = useState({ from: today, to: today });
-  const store = useFirestoreOrders(hotelId, range.from, range.to, today);
+  const store = useFirestoreOrders(hotelId, range.from, range.to, today, { guests: false, tables: false });
   return <SalesView store={store} from={range.from} to={range.to} today={today} onRangeChange={(from, to) => setRange({ from, to })} />;
+}
+
+/** The menu for reference, with today's sold-out dishes marked as they are on an order. */
+export function MenuScreen({ hotelId }: { hotelId: string }) {
+  const { soldOut, error } = useSoldOut(hotelId);
+  return (
+    <div className="space-y-4">
+      {error && <Banner tone="warn">Sold-out dishes could not be loaded: {error}</Banner>}
+      <MenuView soldOut={soldOut} />
+    </div>
+  );
 }

@@ -10,6 +10,7 @@ import {
   grossPriceThb,
   MenuItem,
 } from '../data/foodExchangeMenu';
+import { baseItemId } from '../orders/menuCatalog';
 
 /**
  * Food Exchange à la carte menu — reference for staff answering "what is this and what does it
@@ -27,9 +28,13 @@ import {
  *     labelled either way. Service charge applies first, then VAT — see grossPriceThb.
  *
  * This is Novotel only. Food Exchange is a Novotel outlet, so the caller gates on hotel.
+ *
+ * Dishes marked sold out on an order (Orders > Add items) are marked here too, so a server
+ * answering a guest from this screen does not offer what the kitchen has run out of.
  */
-export const MenuView: React.FC = () => {
+export const MenuView: React.FC<{ soldOut?: readonly string[] }> = ({ soldOut = [] }) => {
   const [query, setQuery] = useState('');
+  const out = useMemo(() => new Set(soldOut), [soldOut]);
   const [showGross, setShowGross] = useState(false);
 
   const trimmed = query.trim().toLowerCase();
@@ -185,11 +190,16 @@ export const MenuView: React.FC = () => {
               {items.map((item) => (
                 <li
                   key={`${item.section}-${item.itemNumber}`}
-                  className="py-3 flex items-start justify-between gap-4"
+                  className={`py-3 flex items-start justify-between gap-4 ${out.has(baseItemId(item)) ? 'opacity-60' : ''}`}
                 >
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-sm font-semibold text-foreground">{item.name}</span>
+                      {out.has(baseItemId(item)) && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-mono-custom font-bold bg-rose-100 text-rose-800 border border-rose-300">
+                          SOLD OUT
+                        </span>
+                      )}
                       {item.dietary?.map((flag) => (
                         <span
                           key={flag}

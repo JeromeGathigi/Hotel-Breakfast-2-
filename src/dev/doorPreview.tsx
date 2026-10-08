@@ -142,6 +142,10 @@ function Preview() {
       setOverrides((prev) => [...prev.filter((o) => o.roomNumber !== input.roomNumber), { ...input, date: today, recordedBy: 'preview@accor.com', recordedAt: new Date().toISOString() }]);
       return 'saved';
     },
+    async clearCorrection(guest) {
+      setOverrides((prev) => prev.filter((o) => o.roomNumber !== guest.roomNumber));
+      return 'saved';
+    },
   };
 
   return (
@@ -149,7 +153,7 @@ function Preview() {
       <div className="rounded-2xl border-2 border-dashed border-fuchsia-500 bg-fuchsia-50 p-3 text-sm text-fuchsia-950">
         <strong>DEV PREVIEW</strong> - invented guests, not connected to Firebase. {alertMode ? 'Alert mode: the forecast disagrees with the list.' : <a className="underline" href="?alerts=1">Show the discrepancy alert</a>}
       </div>
-      <DoorView data={data} service={service} onServiceChange={setService} actions={actions} canManage onOpenImport={() => alert('Opens Import & export in the app.')} ackStore={memoryAcks} />
+      <DoorView data={data} service={service} onServiceChange={setService} actions={actions} canManage onOpenImport={() => alert('Opens Opera import in the app.')} ackStore={memoryAcks} />
     </div>
   );
 }

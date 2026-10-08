@@ -1,7 +1,8 @@
 import { auth, db, doc, deleteDoc, logOperaAuditTrail, serverTimestamp, setDoc, settleWrite, writeBatch } from '../firebase';
 import type { CheckIn, DiningTable } from '../types';
 import { checkinDocId } from '../lib/checkins';
-import type { RoomOverride } from '../lib/overrides';
+import { VACANT } from '../lib/tables';
+import { describeCorrection, type RoomOverride } from '../lib/overrides';
 import type { CheckInInput, CorrectionInput, DoorActions, WriteResult } from './actions';
 
 /**
@@ -18,14 +19,7 @@ function whoAmI(): string {
   return email;
 }
 
-const OCCUPANCY_RELEASE = {
-  status: 'available',
-  occupiedByRoom: null,
-  occupiedByGuest: null,
-  occupiedPax: null,
-  occupiedSince: null,
-  mealService: null,
-};
+const OCCUPANCY_RELEASE = { status: 'available', ...VACANT };
 
 export function firestoreDoorActions(hotelId: string, today: string, tables: DiningTable[]): DoorActions {
   const tableById = new Map(tables.map((t) => [t.id, t]));
@@ -129,22 +123,15 @@ export function firestoreDoorActions(hotelId: string, today: string, tables: Din
         setDoc(doc(db, 'hotels', hotelId, 'overrides', input.roomNumber), record as unknown as Record<string, unknown>),
         `correction for room ${input.roomNumber}`
       );
-      void logOperaAuditTrail(
-        hotelId,
-        'GUEST_OVERRIDE',
-        `Corrected room ${input.roomNumber} (${input.kind}): ` +
-          (input.occupied === false
-            ? 'not occupied'
-            : `${input.adults ?? '-'} adults, breakfast ${input.breakfast === undefined ? 'unchanged' : input.breakfast ? 'yes' : 'no'}`) +
-          (input.note ? ` - ${input.note}` : ''),
-        input.roomNumber
-      );
+      void logOperaAuditTrail(hotelId, 'GUEST_OVERRIDE', `Corrected room ${input.roomNumber} (${input.kind}): ${describeCorrection(input)}`, input.roomNumber);
+      return result;
+    },
+
+    async clearCorrection(guest): Promise<WriteResult> {
+      whoAmI();
+      const result = await settleWrite(deleteDoc(doc(db, 'hotels', hotelId, 'overrides', guest.roomNumber)), `removing the correction for room ${guest.roomNumber}`);
+      void logOperaAuditTrail(hotelId, 'GUEST_OVERRIDE', `Removed the correction for room ${guest.roomNumber}`, guest.roomNumber, guest.guestName);
       return result;
     },
   };
-}
-
-/** Removes a correction, e.g. one made against the wrong room. */
-export async function clearCorrection(hotelId: string, roomNumber: string): Promise<void> {
-  await deleteDoc(doc(db, 'hotels', hotelId, 'overrides', roomNumber));
 }

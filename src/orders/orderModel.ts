@@ -120,6 +120,12 @@ export interface Order {
   vatRate: number;
   /** Sum of complimentary payments, top-level so the security rules can see it change. */
   compThb: number;
+  /**
+   * Net value of dishes voided after they were served. Taking a dish the guest has eaten off the
+   * bill is a comp by another name, so it is a manager's call like a comp; top-level for the same
+   * reason as compThb. Absent on orders made before 8 Oct 2026 - read it with servedVoidThb().
+   */
+  servedVoidThb?: number;
   cancelReason: string | null;
   /** Sequences for line and payment ids - deterministic, so no randomness is needed. */
   lineSeq: number;
@@ -272,6 +278,7 @@ export function openOrder(input: NewOrder, actor: Actor): Order {
     serviceChargeRate: SERVICE_CHARGE_RATE,
     vatRate: VAT_RATE,
     compThb: 0,
+    servedVoidThb: 0,
     cancelReason: null,
     lineSeq: 0,
     paymentSeq: 0,
@@ -393,6 +400,14 @@ export function markServed(order: Order, lineIds: string[], actor: Actor): Order
 }
 
 /** Sent or served items leave the bill only this way, with a reason that stays on the order. */
+/** Net THB of the dishes on this order voided after they were served. */
+export const servedVoidThb = (order: Pick<Order, 'servedVoidThb'>) => order.servedVoidThb ?? 0;
+
+/**
+ * Takes a dish off the bill. Not yet sent: it is simply removed. Sent but not served: anyone, with
+ * a reason. Already served: a manager, with a reason - enforced by the UI and by the security
+ * rules through servedVoidThb, as a comp is through compThb.
+ */
 export function voidLine(order: Order, lineId: string, reason: string, actor: Actor): Order {
   requireActor(actor);
   requireOpen(order, 'void items');
@@ -401,8 +416,10 @@ export function voidLine(order: Order, lineId: string, reason: string, actor: Ac
   if (line.status === 'void') return order;
   const why = reason.trim();
   if (!why) throw new OrderError('Give a reason for voiding an item the kitchen has already had.');
-  return next(order, actor, 'item-voided', `${line.qty} × ${line.name}: ${why}`, {
+  const served = line.status === 'served';
+  return next(order, actor, 'item-voided', `${line.qty} × ${line.name}${served ? ' (already served)' : ''}: ${why}`, {
     lines: order.lines.map((l) => (l.lineId === lineId ? { ...l, status: 'void' as const, voidReason: why } : l)),
+    ...(served ? { servedVoidThb: Math.round((servedVoidThb(order) + line.unitPriceThb * line.qty) * 100) / 100 } : {}),
   });
 }
 

@@ -13,6 +13,7 @@ import {
   sendToKitchen,
   setDiscount,
   setHeldQty,
+  servedVoidThb,
   voidLine,
   OrderError,
   type Order,
@@ -111,6 +112,19 @@ describe('items', () => {
     o = voidLine(o, 'L1', 'Wrong item entered', host());
     expect(o.lines[0]).toMatchObject({ status: 'void', voidReason: 'Wrong item entered' });
     expect(orderTotals(o).totalThb).toBe(0);
+    // Not served yet: a correction, not a giveaway, so it leaves the manager-only counter alone.
+    expect(servedVoidThb(o)).toBe(0);
+  });
+
+  it('counts a dish voided after it was served, which the rules keep for managers', () => {
+    let o = sendToKitchen(addItem(table(), KHAO_SOY, 2, '', host()), host());
+    o = markServed(o, ['L1'], host());
+    o = voidLine(o, 'L1', 'Quality complaint', manager());
+    expect(servedVoidThb(o)).toBe(500);
+    expect(o.log.at(-1)?.details).toBe('2 × Khao Soy Gai (already served): Quality complaint');
+    expect(summariseOrders([o]).voids).toEqual([expect.objectContaining({ item: 'Khao Soy Gai', served: true, netThb: 500 })]);
+    // Orders opened before the field existed read as zero.
+    expect(servedVoidThb({ servedVoidThb: undefined })).toBe(0);
   });
 
   it('marks sent items served', () => {

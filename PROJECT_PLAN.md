@@ -1,9 +1,9 @@
 # Hotel Breakfast 2 - where it stands
 
-Updated 7 Oct 2026, after an end-to-end audit of every file. 313 tests pass, the typecheck is
-clean, and `npm run build` succeeds. The Firestore rules, orders included, were published on
-8 Oct, and the code is on GitHub `main` as one combined commit; it is not yet deployed to the
-app staff open.
+Updated 8 Oct 2026, after an audit of the layout, services and permissions. 354 tests pass, the
+typecheck is clean, and `npm run build` succeeds. The Firestore rules, orders included, were
+published on 8 Oct; the audit's two rule changes are not yet. GitHub `main` has the code up to the
+orders as one combined commit; the audit is local. None of it is deployed to the app staff open.
 
 ## Done in the 7 Oct audit
 
@@ -57,11 +57,38 @@ protected against formula injection. The floor plan no longer seeds tables from 
 `xlsx` (unfixed advisories), `papaparse` and three other unused dependencies were removed. Opera's
 drop folders are git-ignored.
 
+## Done in the 8 Oct layout, services and permissions audit
+
+**The sidebar follows the work.** Door (check-in, floor plan), Food Exchange (orders, kitchen,
+menu; Novotel only), Management, Administration - defined once in `src/navigation.ts`, with a test
+of what each role sees. Phones and upright tablets get a top bar and a menu instead of a page of
+navigation above the door; the screen is in the address; each device remembers its property.
+
+**Exports moved to the managers who may use them.** They sat on the administrators' import
+screen, now **Opera import**, though they only read data a manager may read.
+
+**Messages match the roles.** The door told managers to import files only an administrator can
+import; it now says who can. Settings → Access lists each role's duties from `src/lib/access.ts`.
+
+**Services that were missing or broken.** A correction made at the door could not be undone - the
+function existed but nothing called it; a room marked "not occupied" by mistake stayed hidden all
+day. Changing a table's status on the floor plan changed only the table tapped, leaving the rest
+of a merged group occupied and impossible to separate. The seated time showed as
+`2026-10-08T00:42:13.120Z`. The kitchen and sales screens downloaded the whole in-house guest
+list they never use. The menu now marks sold-out dishes.
+
+**One permission gap closed.** A host could void a dish the guest had already eaten - a comp by
+another name - while comps were a manager's. Now it is a manager's too, recorded in `servedVoidThb`
+and enforced by the rules (once published), and Sales marks those voids "after serving". The audit
+log is readable by managers only, as the screen that shows it always was.
+
 ## Waiting on the owner
 
 | | Why |
 |---|---|
 | **Publish the new app** where staff open it - AI Studio / Cloud Run | Firebase Hosting is not available on the Starter Tier, and GitHub does not update the live app |
+| **Publish the 8 Oct audit's rules** (FIREBASE_SETUP.md section 1) | audit log for managers only; a served dish voided only by a manager |
+| **Grant manager roles** (`scripts/setClaims.ts`) | nobody has one yet, so discounts, comps, reopening a bill, sold-out dishes and voiding a served dish need an owner account |
 | **Approve deleting the dead files** (below) | the deletion was blocked by a safety check; they are unimported and excluded from the build |
 | Admin key for `scripts/` (FIREBASE_SETUP.md) | roles beyond staff, and unattended imports |
 | Settings → Data maintenance, then a real import | production holds only junk and test data |

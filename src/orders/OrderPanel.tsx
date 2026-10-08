@@ -193,7 +193,8 @@ export const OrderPanel: React.FC<{ order: Order; store: OrdersStore; manager: b
                 Served
               </button>
             )}
-            {open && (l.status === 'sent' || l.status === 'served') && (
+            {/* A dish the guest has had comes off the bill only on a manager's say-so, as a comp does. */}
+            {open && (l.status === 'sent' || (l.status === 'served' && manager)) && (
               <button className={btn.quiet} onClick={() => setDialog({ kind: 'void', line: l })} disabled={busy}>
                 Void
               </button>
@@ -269,7 +270,7 @@ export const OrderPanel: React.FC<{ order: Order; store: OrdersStore; manager: b
       )}
       {dialog?.kind === 'void' && (
         <ReasonDialog
-          title={`Void ${dialog.line.qty} × ${dialog.line.name}`}
+          title={`Void ${dialog.line.qty} × ${dialog.line.name}${dialog.line.status === 'served' ? ' (already served)' : ''}`}
           reasons={VOID_REASONS}
           confirm="Void item"
           error={error}

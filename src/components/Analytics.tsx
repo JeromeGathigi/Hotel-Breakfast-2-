@@ -4,6 +4,7 @@ import { collection, db, onSnapshot } from '../firebase';
 import type { DaySummary } from '../lib/guestImport';
 import { dailyTrend, hourlyProfile, monthTotals, monthlyTrend } from '../lib/analytics';
 import { Banner, Empty } from './ui';
+import { CheckinExport } from './CheckinExport';
 
 /**
  * Breakfast analytics, as the property's spec defines the page (section 10): past days only, from
@@ -154,6 +155,8 @@ export const Analytics: React.FC<{ hotelId: string; today: string }> = ({ hotelI
           </LineChart>
         </Chart>
       )}
+
+      <CheckinExport hotelId={hotelId} today={today} />
     </div>
   );
 };

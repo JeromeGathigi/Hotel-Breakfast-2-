@@ -27,7 +27,37 @@ function friendly(error: unknown): Error {
 /** Changes worth a line in the hotel's audit log as well as on the order itself. */
 const AUDITED = new Set(['discount-set', 'discount-removed', 'payment-removed', 'order-cancelled', 'order-reopened', 'item-voided']);
 
-export function useFirestoreOrders(hotelId: string, from: string, to: string, today: string): OrdersStore {
+const availabilityDoc = (hotelId: string) => doc(db, 'hotels', hotelId, 'menuState', 'availability');
+
+/** Dishes marked sold out, for screens that only show the menu. */
+export function useSoldOut(hotelId: string): { soldOut: string[]; error: string | null } {
+  const [soldOut, setSoldOut] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    setError(null);
+    return onSnapshot(
+      availabilityDoc(hotelId),
+      (snap) => {
+        setSoldOut(snap.exists() ? ((snap.data().soldOut as string[]) ?? []) : []);
+        setError(null);
+      },
+      (e) => setError(e.message)
+    );
+  }, [hotelId]);
+  return { soldOut, error };
+}
+
+/**
+ * Which of the hotel's other lists a screen needs. The kitchen and the sales report never use the
+ * in-house guest list or the tables, so they no longer download them: a display on the pass has
+ * no business holding every guest's name.
+ */
+export interface OrderStreams {
+  guests?: boolean;
+  tables?: boolean;
+}
+
+export function useFirestoreOrders(hotelId: string, from: string, to: string, today: string, streams: OrderStreams = { guests: true, tables: true }): OrdersStore {
   const [orders, setOrders] = useState<Order[]>([]);
   const [soldOut, setSoldOutState] = useState<string[]>([]);
   const [tables, setTables] = useState<DiningTable[]>([]);
@@ -36,14 +66,16 @@ export function useFirestoreOrders(hotelId: string, from: string, to: string, to
   const [errors, setErrors] = useState<OrdersStore['errors']>({});
   const me = auth?.currentUser?.email ?? '';
 
+  const withGuests = streams.guests !== false;
+  const withTables = streams.tables !== false;
+
   useEffect(() => {
     setLoading(true);
     setErrors({});
     const fail = (key: keyof OrdersStore['errors']) => (e: Error) => setErrors((prev) => ({ ...prev, [key]: e.message }));
-    const hotel = (...p: string[]) => [hotelId, ...p] as const;
     const unsubs = [
       onSnapshot(
-        query(collection(db, 'hotels', ...hotel('orders')), where('businessDate', '>=', from), where('businessDate', '<=', to)),
+        query(collection(db, 'hotels', hotelId, 'orders'), where('businessDate', '>=', from), where('businessDate', '<=', to)),
         (snap) => {
           setOrders(snap.docs.map((d) => d.data() as Order).sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
           setLoading(false);
@@ -53,12 +85,16 @@ export function useFirestoreOrders(hotelId: string, from: string, to: string, to
           setLoading(false);
         }
       ),
-      onSnapshot(doc(db, 'hotels', hotelId, 'menuState', 'availability'), (snap) => setSoldOutState(snap.exists() ? ((snap.data().soldOut as string[]) ?? []) : []), fail('menu')),
-      onSnapshot(collection(db, 'hotels', hotelId, 'tables'), (snap) => setTables(snap.docs.map((d) => ({ ...(d.data() as DiningTable), id: d.id }))), fail('tables')),
-      onSnapshot(collection(db, 'hotels', hotelId, 'guests'), (snap) => setGuests(snap.docs.map((d) => ({ ...(d.data() as Guest), roomNumber: d.id }))), fail('guests')),
+      onSnapshot(availabilityDoc(hotelId), (snap) => setSoldOutState(snap.exists() ? ((snap.data().soldOut as string[]) ?? []) : []), fail('menu')),
     ];
+    if (withTables) {
+      unsubs.push(onSnapshot(collection(db, 'hotels', hotelId, 'tables'), (snap) => setTables(snap.docs.map((d) => ({ ...(d.data() as DiningTable), id: d.id }))), fail('tables')));
+    }
+    if (withGuests) {
+      unsubs.push(onSnapshot(collection(db, 'hotels', hotelId, 'guests'), (snap) => setGuests(snap.docs.map((d) => ({ ...(d.data() as Guest), roomNumber: d.id }))), fail('guests')));
+    }
     return () => unsubs.forEach((u) => u());
-  }, [hotelId, from, to]);
+  }, [hotelId, from, to, withGuests, withTables]);
 
   return useMemo<OrdersStore>(
     () => ({
@@ -107,7 +143,7 @@ export function useFirestoreOrders(hotelId: string, from: string, to: string, to
       async setSoldOut(baseIds: string[]) {
         try {
           await runTransaction(db, async (tx) => {
-            tx.set(doc(db, 'hotels', hotelId, 'menuState', 'availability'), { soldOut: baseIds, updatedBy: me, updatedAt: new Date().toISOString() });
+            tx.set(availabilityDoc(hotelId), { soldOut: baseIds, updatedBy: me, updatedAt: new Date().toISOString() });
           });
         } catch (e) {
           throw friendly(e);

@@ -64,7 +64,7 @@ export const SalesView: React.FC<{
        <h2>Payments</h2><table>${rows(METHODS.map((m) => [PAYMENT_LABEL[m], s.byMethod[m]]))}</table>
        <h2>Room charges to post to Opera</h2><table>${rows(s.roomCharges.map((r) => [`${r.orderNumber} · room ${r.roomNumber} · ${r.guestName}`, r.amountThb]))}</table>
        <h2>Items</h2><table>${rows(s.byItem.map((i) => [`${i.qty} × ${i.name}`, i.netThb]))}</table>
-       <h2>Voids</h2><table>${rows(s.voids.map((v) => [`${v.orderNumber} · ${v.qty} × ${v.item} · ${v.reason}`, v.netThb]))}</table>
+       <h2>Voids</h2><table>${rows(s.voids.map((v) => [`${v.orderNumber} · ${v.qty} × ${v.item}${v.served ? ' · after serving' : ''} · ${v.reason}`, v.netThb]))}</table>
        <h2>Cancelled orders</h2><table>${rows(s.cancellations.map((c) => [`${c.orderNumber} · ${c.reason} · ${c.by}`, '']))}</table>
        <h2>Still open</h2><table>${rows(s.stillOpen.map((o) => [`${o.orderNumber} · ${o.where}`, o.outstandingThb]))}</table>`,
       REPORT_STYLE
@@ -221,7 +221,7 @@ export const SalesView: React.FC<{
           <ul className="text-sm space-y-1">
             {s.voids.map((v, i) => (
               <li key={`v${i}`}>
-                {v.orderNumber} · void {v.qty} × {v.item} ({formatThb(v.netThb)}) · {v.reason}
+                {v.orderNumber} · void {v.qty} × {v.item} ({formatThb(v.netThb)}){v.served ? ' · after serving' : ''} · {v.reason}
               </li>
             ))}
             {s.cancellations.map((c, i) => (

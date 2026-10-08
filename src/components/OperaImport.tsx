@@ -1,40 +1,35 @@
 import React, { useState } from 'react';
-import { Download, FileText, Upload } from 'lucide-react';
-import { collection, db, getDocs } from '../firebase';
+import { FileText, Upload } from 'lucide-react';
 import { parseInHouseReport } from '../parsing';
 import { planForecastImport, planGuestListImport, type ForecastImportPlan, type GuestImportPlan, type HotelId } from '../lib/guestImport';
 import { readCurrentList, runForecastImport, runGuestImport, type CurrentList } from '../lib/firestoreImport';
-import { buildDoorRooms, type DoorData } from '../door/doorModel';
-import type { CheckIn, MealForecastItem } from '../types';
-import type { RoomOverride } from '../lib/overrides';
-import { addDays } from '../lib/businessDate';
-import { timeInBangkok } from '../lib/dates';
-import { downloadCsv, toCsv } from '../lib/csv';
 import { Banner, btn } from './ui';
 
 const NAME: Record<HotelId, string> = { novotel: 'Novotel', ibis: 'ibis' };
 
 /**
- * Import & export, administrators only.
+ * Opera import, administrators only - the database lets nobody else write the guest list.
  *
  * Both Opera files are imported here, one property at a time, and each import is PLANNED and shown
  * before anything is written: which property the file says it is, whether it is today's, how many
  * rooms arrive and leave, what breakfast looks like. Problems that need a person's judgement must
  * be ticked off before the import button enables. See src/lib/guestImport.ts for the rules.
+ *
+ * The CSV exports that used to sit here only read data a manager may read, so they moved to the
+ * screens holding that data: the manifest, the meal forecast, Settings > Rate codes and Analytics.
  */
-export const ImportExport: React.FC<{ hotelId: string; today: string }> = ({ hotelId, today }) => {
+export const OperaImport: React.FC<{ hotelId: string; today: string }> = ({ hotelId, today }) => {
   const hotel = hotelId as HotelId;
   return (
     <div className="space-y-4">
       <div className="bg-white rounded-2xl p-5 border border-border shadow-luxury">
-        <h2 className="text-2xl font-bold font-display">Import & export · {NAME[hotel]}</h2>
+        <h2 className="text-2xl font-bold font-display">Opera import · {NAME[hotel]}</h2>
         <p className="text-sm text-muted-foreground">
           Each morning: export the two Opera reports for {NAME[hotel]} as tab-delimited text and import them here. Switch property in the sidebar for the other hotel.
         </p>
       </div>
       <GuestListImport hotel={hotel} today={today} />
       <ForecastImport hotel={hotel} today={today} />
-      <Exports hotel={hotel} today={today} />
     </div>
   );
 };
@@ -289,151 +284,6 @@ function ForecastImport({ hotel, today }: { hotel: HotelId; today: string }) {
       {result && (
         <Banner tone={result.tone} role={result.tone === 'critical' ? 'alert' : 'status'}>
           {result.text}
-        </Banner>
-      )}
-    </section>
-  );
-}
-
-function Exports({ hotel, today }: { hotel: HotelId; today: string }) {
-  const [from, setFrom] = useState(addDays(today, -6));
-  const [to, setTo] = useState(today);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const guard = (label: string, fn: () => Promise<void>) => async () => {
-    setBusy(label);
-    setError(null);
-    try {
-      await fn();
-    } catch (e) {
-      setError(`${label} failed: ${(e as Error)?.message || 'unknown error'}`);
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const doorData = async (): Promise<DoorData> => {
-    const [cur, overrides, checkins] = await Promise.all([
-      readCurrentList(hotel),
-      getDocs(collection(db, 'hotels', hotel, 'overrides')),
-      getDocs(collection(db, 'hotels', hotel, 'checkins', today, 'rooms')),
-    ]);
-    return {
-      hotelId: hotel,
-      today,
-      guests: cur.guests,
-      checkins: checkins.docs.map((d) => d.data() as CheckIn),
-      overrides: overrides.docs.map((d) => d.data() as RoomOverride),
-      tables: [],
-      metadata: null,
-      packages: cur.packages,
-      forecastToday: null,
-      loading: false,
-      errors: {},
-    };
-  };
-
-  const exportManifest = guard('Manifest export', async () => {
-    const rooms = buildDoorRooms(await doorData(), 'breakfast');
-    downloadCsv(
-      `${hotel}-manifest-${today}.csv`,
-      toCsv(
-        ['Room', 'Guest', 'VIP', 'Rate code', 'Breakfast', 'Why', 'Adults', 'Children', 'Arrival', 'Departure', 'Checked in'],
-        rooms.map((r) => [
-          r.guest.roomNumber,
-          r.guest.guestName,
-          r.vip?.label ?? '',
-          r.guest.rateCode ?? '',
-          r.breakfast.unverified ? 'Check' : r.breakfast.entitled ? 'Yes' : 'No',
-          r.breakfast.reason,
-          r.guest.adults,
-          r.guest.children,
-          r.guest.arrivalDate,
-          r.guest.departureDate,
-          r.checkIn ? timeInBangkok(r.checkIn.timestamp) : '',
-        ])
-      )
-    );
-  });
-
-  const exportToConfirm = guard('Rate-code export', async () => {
-    const rooms = buildDoorRooms(await doorData(), 'breakfast').filter((r) => r.breakfast.unverified || r.breakfast.conflict);
-    downloadCsv(
-      `${hotel}-rates-to-confirm-${today}.csv`,
-      toCsv(['Room', 'Guest', 'Rate code', 'Block', 'Why it needs checking'], rooms.map((r) => [r.guest.roomNumber, r.guest.guestName, r.guest.rateCode ?? '', r.guest.blockCode ?? '', r.breakfast.reason]))
-    );
-  });
-
-  const exportCheckins = guard('Check-in export', async () => {
-    if (from > to) throw new Error('the start date is after the end date');
-    const dates: string[] = [];
-    for (let d = from; d <= to && dates.length < 93; d = addDays(d, 1)) dates.push(d);
-    const snaps = await Promise.all(dates.map((d) => getDocs(collection(db, 'hotels', hotel, 'checkins', d, 'rooms'))));
-    const rows = snaps.flatMap((s, i) =>
-      s.docs.map((doc) => {
-        const c = doc.data() as CheckIn;
-        return [
-          dates[i],
-          c.mealService ?? 'breakfast',
-          c.roomNumber,
-          c.guestName,
-          c.adultsAte,
-          c.childrenAte,
-          c.infantsAte,
-          c.bookedPax ?? '',
-          timeInBangkok(c.timestamp),
-          c.tableNumber ?? '',
-          c.recordedBy,
-          c.authorizingStaff ?? '',
-          c.overCapacityOtherReason ?? '',
-        ];
-      })
-    );
-    downloadCsv(
-      `${hotel}-checkins-${from}-to-${to}.csv`,
-      toCsv(['Date', 'Service', 'Room', 'Guest', 'Adults', 'Children', 'Infants', 'Booked', 'Time', 'Table', 'Recorded by', 'Authorised by', 'Reason'], rows)
-    );
-  });
-
-  const exportForecast = guard('Forecast export', async () => {
-    const snap = await getDocs(collection(db, 'hotels', hotel, 'forecasts'));
-    const docs = snap.docs.map((d) => d.data() as MealForecastItem).filter((d) => d.source === 'package-forecast' && d.date >= today).sort((a, b) => a.date.localeCompare(b.date));
-    downloadCsv(`${hotel}-forecast-from-${today}.csv`, toCsv(['Date', 'Breakfast', 'Dinner', 'Meeting packages'], docs.map((d) => [d.date, d.totalBreakfast, d.totalDinner, d.meetingPackages ?? 0])));
-  });
-
-  return (
-    <section className="bg-white rounded-2xl border border-border p-5 space-y-3">
-      <h3 className="text-lg font-bold">Export</h3>
-      <div className="flex flex-wrap gap-2">
-        <button className={btn.secondary} onClick={exportManifest} disabled={busy !== null}>
-          <Download size={16} /> Today's manifest
-        </button>
-        <button className={btn.secondary} onClick={exportToConfirm} disabled={busy !== null}>
-          <Download size={16} /> Rates to confirm
-        </button>
-        <button className={btn.secondary} onClick={exportForecast} disabled={busy !== null}>
-          <Download size={16} /> Forecast
-        </button>
-      </div>
-      <div className="flex flex-wrap items-end gap-2">
-        <label className="text-sm font-bold">
-          From
-          <input type="date" className="block h-11 px-3 rounded-xl border border-border" value={from} max={today} onChange={(e) => setFrom(e.target.value)} />
-        </label>
-        <label className="text-sm font-bold">
-          To
-          <input type="date" className="block h-11 px-3 rounded-xl border border-border" value={to} max={today} onChange={(e) => setTo(e.target.value)} />
-        </label>
-        <button className={btn.secondary} onClick={exportCheckins} disabled={busy !== null}>
-          <Download size={16} /> Check-ins
-        </button>
-      </div>
-      <p className="text-xs text-muted-foreground">Files open in Excel. Cells that start like a formula are written as text, so a booking name cannot run anything.</p>
-      {busy && <Banner tone="pending">{busy}…</Banner>}
-      {error && (
-        <Banner tone="critical" role="alert">
-          {error}
         </Banner>
       )}
     </section>

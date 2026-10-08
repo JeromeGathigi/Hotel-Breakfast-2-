@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { assessGuestBreakfast, summariseBreakfast } from './entitlement';
 import { breakfastFromNotes } from './noteSignals';
-import { applyOverride, type RoomOverride } from './overrides';
+import { applyOverride, describeCorrection, roomsRemovedToday, type RoomOverride } from './overrides';
 import type { PackageIndex } from '../parsing/packageDetail';
 import type { Guest } from '../types';
 
@@ -197,5 +197,21 @@ describe('applyOverride', () => {
 
   it('leaves the guest untouched when the correction is for another day', () => {
     expect(applyOverride(base, o, '2026-09-03')).toBe(base);
+  });
+
+  it('keeps the rooms it removed findable, so a mistaken one can be put back', () => {
+    const gone: RoomOverride = { ...o, roomNumber: '302', resvNameId: 'R2', kind: 'no-details', occupied: false };
+    const guests = [guest({ roomNumber: '302', resvNameId: 'R2' }), guest({ roomNumber: '301', resvNameId: 'R1' })];
+    expect(roomsRemovedToday(guests, [o, gone], TODAY).map((r) => r.guest.roomNumber)).toEqual(['302']);
+    // Yesterday's correction, or one made for the previous reservation in the room, removes nothing.
+    expect(roomsRemovedToday(guests, [{ ...gone, date: '2026-09-01' }], TODAY)).toEqual([]);
+    expect(roomsRemovedToday(guests, [{ ...gone, resvNameId: 'OLD' }], TODAY)).toEqual([]);
+  });
+
+  it('describes a correction in one line', () => {
+    expect(describeCorrection(o)).toBe('2 adults, breakfast yes');
+    expect(describeCorrection({ ...o, occupied: false, note: 'duty manager' })).toBe('not occupied today - duty manager');
+    expect(describeCorrection({ kind: 'rate', breakfast: false })).toBe('room only confirmed');
+    expect(describeCorrection({ kind: 'rate', breakfast: false, note: 'Front office confirmed room only' })).toBe('Front office confirmed room only');
   });
 });

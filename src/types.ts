@@ -131,9 +131,9 @@ export interface DiningTable {
   status: 'available' | 'occupied' | 'reserved' | 'cleaning';
   occupiedByRoom?: string | null;
   occupiedByGuest?: string | null;
-  occupiedPax?: number;
+  occupiedPax?: number | null;
   occupiedSince?: string | null;
-  mealService?: MealServiceType;
+  mealService?: MealServiceType | null;
   x?: number; // viewBox coordinate X (drawing units)
   y?: number; // viewBox coordinate Y (drawing units)
   shape?: 'rectangle' | 'square' | 'round' | 'booth' | 'diamond' | 'bar_seat' | 'lounge' | 'semi_circle';

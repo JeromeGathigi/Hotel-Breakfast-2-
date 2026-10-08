@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, CheckCheck, RotateCcw, Search, StickyNote, UserCheck, X } from 'lucide-react';
+import { AlertTriangle, CheckCheck, RotateCcw, Search, StickyNote, Undo2, UserCheck, X } from 'lucide-react';
 import type { MealServiceType } from '../types';
 import { MEAL_SERVICES } from '../constants';
 import { buildDoorRooms, doorStats, reconcile, searchRooms, ackKey, breakfastBasisLabel, type DoorData, type DoorRoom } from './doorModel';
@@ -10,6 +10,7 @@ import { BatchCheckInDialog } from './BatchCheckInDialog';
 import { Banner, Modal, VipBadge, btn } from '../components/ui';
 import { canonicalPlan } from '../lib/meals';
 import { checkinPax } from '../lib/checkins';
+import { describeCorrection, roomsRemovedToday } from '../lib/overrides';
 import { timeInBangkok } from '../lib/dates';
 import { isWeekendDate } from '../lib/businessDate';
 
@@ -43,14 +44,16 @@ export interface DoorViewProps {
   service: MealServiceType;
   onServiceChange: (s: MealServiceType) => void;
   actions: DoorActions;
-  /** Managers and admins see how to fix what the alerts report. */
+  /** Managers and admins are told how the alerts get fixed; hosts are told whom to tell. */
   canManage: boolean;
+  /** Present only for a role that may import (administrators): opens the Opera import. */
   onOpenImport?: () => void;
   ackStore?: AckStore;
 }
 
 export const DoorView: React.FC<DoorViewProps> = ({ data, service, onServiceChange, actions, canManage, onOpenImport, ackStore = browserAckStore }) => {
   const rooms = useMemo(() => buildDoorRooms(data, service), [data, service]);
+  const removed = useMemo(() => roomsRemovedToday(data.guests, data.overrides, data.today), [data.guests, data.overrides, data.today]);
   const stats = useMemo(() => doorStats(rooms, service), [rooms, service]);
   const recon = useMemo(() => reconcile(rooms, data.forecastToday), [rooms, data.forecastToday]);
 
@@ -59,6 +62,7 @@ export const DoorView: React.FC<DoorViewProps> = ({ data, service, onServiceChan
   const [checkInRoom, setCheckInRoom] = useState<string | null>(null);
   const [correctRoom, setCorrectRoom] = useState<string | null>(null);
   const [undoRoom, setUndoRoom] = useState<string | null>(null);
+  const [uncorrect, setUncorrect] = useState<{ roomNumber: string; guestName: string; what: string } | null>(null);
   const [batchOpen, setBatchOpen] = useState(false);
   const [toast, setToast] = useState<{ tone: 'ok' | 'warn' | 'critical'; text: string } | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -131,6 +135,29 @@ export const DoorView: React.FC<DoorViewProps> = ({ data, service, onServiceChan
       setToast({ tone: 'critical', text: `Could not cancel room ${r.guest.roomNumber}: ${(e as Error)?.message || 'unknown error'}` });
     }
   };
+
+  const confirmUncorrect = async () => {
+    const target = uncorrect;
+    setUncorrect(null);
+    if (!target) return;
+    try {
+      const result = await actions.clearCorrection(target);
+      setToast(
+        result === 'saved'
+          ? { tone: 'ok', text: `Room ${target.roomNumber} is back to what Opera's list says.` }
+          : { tone: 'warn', text: `Room ${target.roomNumber}: the correction is removed on this device and will reach the server when the connection returns.` }
+      );
+    } catch (e) {
+      setToast({ tone: 'critical', text: `Could not remove the correction for room ${target.roomNumber}: ${(e as Error)?.message || 'unknown error'}` });
+    }
+  };
+
+  /** Who can make the list right: an administrator imports; anyone else is told whom to ask. */
+  const noListAdvice = onOpenImport
+    ? 'Import this morning’s "Guests INH - By Room" export.'
+    : canManage
+      ? 'Ask an administrator to import this morning’s Opera guest list.'
+      : 'Tell the duty manager: this morning’s Opera guest list has not been imported.';
 
   const streamErrors = Object.entries(data.errors).filter(([, v]) => v);
 
@@ -217,9 +244,25 @@ export const DoorView: React.FC<DoorViewProps> = ({ data, service, onServiceChan
       {stats.dataIssues.noDetails > 0 && (
         <Banner tone="warn" title={`${stats.dataIssues.noDetails} room${stats.dataIssues.noDetails === 1 ? '' : 's'} found with no guest details - please review`} action={<button className={btn.secondary} onClick={() => setFilter('data')}>Review</button>} />
       )}
+      {removed.length > 0 && (
+        <Banner tone="info" title={`${removed.length} room${removed.length === 1 ? '' : 's'} marked not occupied today`}>
+          <p>Left out of the list and every count. Put a room back if it was marked by mistake.</p>
+          <div className="flex flex-wrap gap-2 pt-2">
+            {removed.map(({ guest, override }) => (
+              <button
+                key={guest.roomNumber}
+                className={btn.secondary}
+                onClick={() => setUncorrect({ roomNumber: guest.roomNumber, guestName: guest.guestName, what: describeCorrection(override) })}
+              >
+                <Undo2 size={16} /> Put back {guest.roomNumber}
+              </button>
+            ))}
+          </div>
+        </Banner>
+      )}
 
-      {/* Search first */}
-      <div className="flex flex-col md:flex-row gap-2">
+      {/* Search first - on its own row until there is room for it beside the filters. */}
+      <div className="flex flex-col xl:flex-row gap-2">
         <div className="relative flex-1">
           <Search size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <input
@@ -259,8 +302,8 @@ export const DoorView: React.FC<DoorViewProps> = ({ data, service, onServiceChan
       {data.loading ? (
         <p className="text-center text-muted-foreground py-10">Loading the guest list…</p>
       ) : rooms.length === 0 && !data.errors.guests ? (
-        <Banner tone="info" title="No guests for this property">
-          No Opera guest list has been imported.{canManage ? ' Import this morning’s "Guests INH - By Room" export.' : ' Ask a manager to import this morning’s Opera export.'}
+        <Banner tone="info" title="No guests for this property" action={onOpenImport ? <button className={btn.secondary} onClick={onOpenImport}>Open import</button> : undefined}>
+          No Opera guest list has been imported. {noListAdvice}
         </Banner>
       ) : filtered.length === 0 ? (
         <p className="text-center text-muted-foreground py-10">No room matches “{query}”.</p>
@@ -274,6 +317,7 @@ export const DoorView: React.FC<DoorViewProps> = ({ data, service, onServiceChan
               onCheckIn={() => setCheckInRoom(r.guest.roomNumber)}
               onCorrect={() => setCorrectRoom(r.guest.roomNumber)}
               onUndo={() => setUndoRoom(r.guest.roomNumber)}
+              onUncorrect={() => r.correction && setUncorrect({ roomNumber: r.guest.roomNumber, guestName: r.guest.guestName, what: describeCorrection(r.correction) })}
             />
           ))}
         </ul>
@@ -335,6 +379,28 @@ export const DoorView: React.FC<DoorViewProps> = ({ data, service, onServiceChan
         </Modal>
       )}
 
+      {uncorrect && (
+        <Modal
+          title={`Remove the correction for room ${uncorrect.roomNumber}?`}
+          onClose={() => setUncorrect(null)}
+          width="md"
+          footer={
+            <>
+              <button className={btn.secondary} onClick={() => setUncorrect(null)}>
+                Keep it
+              </button>
+              <button className={btn.danger} onClick={confirmUncorrect}>
+                <Undo2 size={16} /> Remove correction
+              </button>
+            </>
+          }
+        >
+          <p className="text-base">
+            Today's correction says: <strong>{uncorrect.what}</strong>. Without it, the room goes back to what Opera's list says.
+          </p>
+        </Modal>
+      )}
+
       {popup === 'discrepancy' && (
         <Modal
           title="Opera's breakfast forecast does not match the guest list"
@@ -344,7 +410,8 @@ export const DoorView: React.FC<DoorViewProps> = ({ data, service, onServiceChan
         >
           <p className="text-base leading-relaxed">{recon.message}</p>
           <p className="text-sm text-muted-foreground">
-            Serve as normal. {canManage ? 'Check that both of this morning’s Opera files were imported - the guest list and the package forecast.' : 'Tell the duty manager.'}
+            Serve as normal.{' '}
+            {canManage ? 'Check that both of this morning’s Opera files were imported - the guest list and the package forecast (Settings › Data status).' : 'Tell the duty manager.'}
           </p>
         </Modal>
       )}
@@ -355,7 +422,9 @@ export const DoorView: React.FC<DoorViewProps> = ({ data, service, onServiceChan
             <em>Check</em> on the list. Serve the guest, and confirm with the front office from the room's check-in screen.
           </p>
           {canManage && !data.packages && (
-            <p className="text-sm text-muted-foreground">Importing today's package forecast usually resolves most of these: it says which reservations carry breakfast.</p>
+            <p className="text-sm text-muted-foreground">
+              {onOpenImport ? 'Importing' : 'Ask an administrator to import'} today's package forecast: it says which reservations carry breakfast, and usually resolves most of these.
+            </p>
           )}
         </Modal>
       )}
@@ -375,7 +444,14 @@ const Stat: React.FC<{ label: string; value: number; sub: string; tone?: 'accent
   );
 };
 
-const GuestCard: React.FC<{ room: DoorRoom; service: MealServiceType; onCheckIn: () => void; onCorrect: () => void; onUndo: () => void }> = ({ room, service, onCheckIn, onCorrect, onUndo }) => {
+const GuestCard: React.FC<{
+  room: DoorRoom;
+  service: MealServiceType;
+  onCheckIn: () => void;
+  onCorrect: () => void;
+  onUndo: () => void;
+  onUncorrect: () => void;
+}> = ({ room, service, onCheckIn, onCorrect, onUndo, onUncorrect }) => {
   const { guest, breakfast, checkIn } = room;
   const seated = checkinPax(checkIn);
   const partial = Boolean(checkIn) && seated < room.booked.pax;
@@ -431,6 +507,17 @@ const GuestCard: React.FC<{ room: DoorRoom; service: MealServiceType; onCheckIn:
               <span className="line-clamp-2">{n.text}</span>
             </p>
           ))}
+        </div>
+      )}
+
+      {room.correction && (
+        <div className="flex items-center justify-between gap-2 rounded-xl bg-sky-50 border border-sky-200 pl-3 text-sm text-sky-950">
+          <span className="min-w-0 py-1.5">
+            Corrected: {describeCorrection(room.correction)} <span className="text-sky-800/80">· {room.correction.recordedBy}</span>
+          </span>
+          <button className="h-11 px-3 shrink-0 font-bold underline underline-offset-2 cursor-pointer" onClick={onUncorrect} aria-label={`Remove the correction for room ${guest.roomNumber}`}>
+            Undo
+          </button>
         </div>
       )}
 

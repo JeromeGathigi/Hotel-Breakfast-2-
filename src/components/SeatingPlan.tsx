@@ -17,12 +17,13 @@ import { DEFAULT_NOVOTEL_TABLES, DEFAULT_IBIS_TABLES } from '../constants';
 import { TableCardSkeleton } from './Skeleton';
 import { RestaurantFloorPlan2D } from './RestaurantFloorPlan2D';
 import { Banner } from './ui';
-import { buildMergePlan, buildUnmergePlan, getMergedGroupMembers } from '../lib/tables';
+import { buildMergePlan, buildStatusChange, buildUnmergePlan, getMergedGroupMembers } from '../lib/tables';
 import { 
   getOccupiedDurationMinutes, 
   getTurnoverStage, 
   getTurnoverStyle, 
-  formatOccupiedDuration 
+  formatOccupiedDuration,
+  formatSeatedAt
 } from '../lib/turnover';
 import { 
   Users, 
@@ -51,6 +52,7 @@ import { motion, AnimatePresence } from 'motion/react';
 
 interface SeatingPlanProps {
   hotelId: string;
+  /** May edit tables and saved layouts (canEditFloorPlan). Seating and clearing are for everyone. */
   isAdmin: boolean;
   activeMealService: MealServiceType;
 }
@@ -221,16 +223,11 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
 
   const handleUpdateStatus = async (table: DiningTable, newStatus: DiningTable['status']) => {
     try {
-      const tableRef = doc(db, 'hotels', hotelId, 'tables', table.id);
-      const updates: Partial<DiningTable> = { status: newStatus };
-      if (newStatus === 'available') {
-        updates.occupiedByRoom = null;
-        updates.occupiedByGuest = null;
-        updates.occupiedPax = undefined;
-        updates.occupiedSince = null;
-      }
-
-      await updateDoc(tableRef, updates);
+      // The whole merged group, as at the door; see buildStatusChange.
+      const updates = buildStatusChange(table, newStatus, tables, { now: new Date().toISOString(), service: activeMealService });
+      const batch = writeBatch(db);
+      for (const [id, update] of Object.entries(updates)) batch.update(doc(db, 'hotels', hotelId, 'tables', id), update);
+      await batch.commit();
 
       await logOperaAuditTrail(
         hotelId,
@@ -241,7 +238,7 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
       );
 
       if (selectedTable?.id === table.id) {
-        setSelectedTable((prev) => (prev ? { ...prev, status: newStatus } : null));
+        setSelectedTable((prev) => (prev ? { ...prev, ...updates[table.id] } : null));
       }
     } catch (err) {
       report('Could not change the table status', err);
@@ -1105,7 +1102,7 @@ export const SeatingPlan: React.FC<SeatingPlanProps> = ({ hotelId, isAdmin, acti
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold font-mono-custom text-accent">RM {table.occupiedByRoom}</span>
                       <span className="text-[10px] font-mono-custom text-muted-foreground flex items-center gap-1">
-                        <Clock size={10} /> {table.occupiedSince || 'Active'}
+                        <Clock size={10} /> {formatSeatedAt(table.occupiedSince) || '—'}
                       </span>
                     </div>
                     <p className="text-xs font-bold font-sans text-foreground truncate">{table.occupiedByGuest || 'Seated Guest'}</p>

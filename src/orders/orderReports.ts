@@ -48,7 +48,8 @@ export interface SalesSummary {
   byHour: Array<{ hour: number; orders: number; revenueThb: number }>;
   byStaff: Array<{ email: string; opened: number; closed: number; revenueThb: number }>;
   roomCharges: RoomCharge[];
-  voids: Array<{ orderNumber: string; item: string; qty: number; netThb: number; reason: string }>;
+  /** `served`: voided after it reached the table - a manager's call. */
+  voids: Array<{ orderNumber: string; item: string; qty: number; netThb: number; reason: string; served: boolean }>;
   cancellations: Array<{ orderNumber: string; reason: string; by: string; at: string }>;
   stillOpen: Array<{ orderNumber: string; where: string; totalThb: number; outstandingThb: number }>;
 }
@@ -87,7 +88,7 @@ export function summariseOrders(orders: Order[]): SalesSummary {
     if (o.status !== 'cancelled') person(o.createdBy).opened += 1;
 
     for (const l of o.lines) {
-      if (l.status === 'void') s.voids.push({ orderNumber: o.number, item: l.name, qty: l.qty, netThb: round2(l.unitPriceThb * l.qty), reason: l.voidReason ?? '' });
+      if (l.status === 'void') s.voids.push({ orderNumber: o.number, item: l.name, qty: l.qty, netThb: round2(l.unitPriceThb * l.qty), reason: l.voidReason ?? '', served: Boolean(l.servedAt) });
     }
 
     if (o.status === 'cancelled') {

@@ -68,10 +68,25 @@ describe('the app and firestore.rules agree', () => {
     expect(rules).toMatch(/verified\(\) && mail\(\)\.matches/);
   });
 
-  it('lets staff write audit entries only as themselves, and never edit them', () => {
+  it('lets staff write audit entries only as themselves, never edit them, and leaves reading them to managers', () => {
     const block = rules.slice(rules.indexOf('match /auditLogs/'));
+    expect(block).toMatch(/allow read: if isManager\(\);/);
     expect(block).toMatch(/allow create: if isStaff\(\) && writtenAsSelf\('userEmail'\)/);
     expect(block).toMatch(/allow update, delete: if false/);
+  });
+
+  it("keeps a bill's manager-only changes out of a host's reach", () => {
+    const block = rules.slice(rules.indexOf('match /orders/'), rules.indexOf('match /counters/'));
+    const hostBranch = block.slice(block.indexOf('isManager() ||'));
+    for (const guarded of [
+      'request.resource.data.discount == resource.data.discount',
+      'request.resource.data.compThb == resource.data.compThb',
+      "request.resource.data.get('servedVoidThb', 0) == resource.data.get('servedVoidThb', 0)",
+      'request.resource.data.payments.size() >= resource.data.payments.size()',
+    ]) {
+      expect(hostBranch).toContain(guarded);
+    }
+    expect(block).toMatch(/allow delete: if false/);
   });
 
   it('has no catch-all match', () => {

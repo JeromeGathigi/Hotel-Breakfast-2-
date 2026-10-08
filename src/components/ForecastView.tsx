@@ -1,11 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Download } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { collection, db, onSnapshot } from '../firebase';
 import type { MealForecastItem } from '../types';
 import { isLegacyForecast } from '../lib/guestImport';
 import { addDays, weekdayName } from '../lib/businessDate';
 import { dateTimeInBangkok } from '../lib/dates';
-import { Banner, Empty } from './ui';
+import { downloadCsv, toCsv } from '../lib/csv';
+import { Banner, Empty, btn } from './ui';
 
 /**
  * Opera's package forecast, from today forward.
@@ -57,6 +59,12 @@ export const ForecastView: React.FC<{ hotelId: string; today: string }> = ({ hot
   }));
   const totals = upcoming.reduce((acc, d) => ({ breakfast: acc.breakfast + d.totalBreakfast, dinner: acc.dinner + d.totalDinner }), { breakfast: 0, dinner: 0 });
 
+  /** Every day the latest forecast covers from today, not only the range on screen. */
+  const exportCsv = () => {
+    const ahead = docs.filter((d) => !isLegacyForecast(d) && d.date >= today).sort((a, b) => a.date.localeCompare(b.date));
+    downloadCsv(`${hotelId}-forecast-from-${today}.csv`, toCsv(['Date', 'Breakfast', 'Dinner', 'Meeting packages'], ahead.map((d) => [d.date, d.totalBreakfast, d.totalDinner, d.meetingPackages ?? 0])));
+  };
+
   return (
     <div className="space-y-4">
       <div className="bg-white rounded-2xl p-5 border border-border shadow-luxury flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -66,12 +74,17 @@ export const ForecastView: React.FC<{ hotelId: string; today: string }> = ({ hot
             {latest ? `From ${latest.filename || 'the package forecast'}, produced by Opera on ${latest.reportDate || 'an unknown date'}${latest.importedAt ? `, imported ${dateTimeInBangkok(latest.importedAt)}` : ''}.` : 'No package forecast imported yet.'}
           </p>
         </div>
-        <div className="flex rounded-xl border border-border bg-[#F2EBE4]/70 p-1">
-          {([7, 14, 31] as const).map((n) => (
-            <button key={n} onClick={() => setRange(n)} aria-pressed={range === n} className={`h-10 px-4 rounded-lg text-sm font-bold cursor-pointer ${range === n ? 'bg-white shadow-sm' : 'text-muted-foreground'}`}>
-              {n === 31 ? 'Month' : `${n} days`}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex rounded-xl border border-border bg-[#F2EBE4]/70 p-1">
+            {([7, 14, 31] as const).map((n) => (
+              <button key={n} onClick={() => setRange(n)} aria-pressed={range === n} className={`h-10 px-4 rounded-lg text-sm font-bold cursor-pointer ${range === n ? 'bg-white shadow-sm' : 'text-muted-foreground'}`}>
+                {n === 31 ? 'Month' : `${n} days`}
+              </button>
+            ))}
+          </div>
+          <button className={btn.secondary} onClick={exportCsv} disabled={upcoming.length === 0}>
+            <Download size={16} /> Export CSV
+          </button>
         </div>
       </div>
 
@@ -89,7 +102,7 @@ export const ForecastView: React.FC<{ hotelId: string; today: string }> = ({ hot
       {loading ? (
         <p className="text-center text-muted-foreground py-10">Loading…</p>
       ) : upcoming.length === 0 ? (
-        <Empty title="No forecast for the coming days">Import today's Opera package forecast on the Import & export screen.</Empty>
+        <Empty title="No forecast for the coming days">An administrator imports Opera's package forecast each morning on the Opera import screen.</Empty>
       ) : (
         <>
           <div className="grid grid-cols-2 gap-3">

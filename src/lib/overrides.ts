@@ -66,3 +66,32 @@ export function applyOverride(guest: Guest, override: RoomOverride | null | unde
   };
   return corrected;
 }
+
+/** One line for the audit log and the guest card: what the correction says about the room. */
+export function describeCorrection(o: Pick<RoomOverride, 'kind' | 'occupied' | 'adults' | 'breakfast' | 'note'>): string {
+  const what =
+    o.occupied === false
+      ? 'not occupied today'
+      : o.kind === 'rate'
+        ? o.breakfast
+          ? 'breakfast confirmed'
+          : 'room only confirmed'
+        : `${o.adults ?? '-'} adults, breakfast ${o.breakfast === undefined ? 'unchanged' : o.breakfast ? 'yes' : 'no'}`;
+  // A rate confirmation's note already says it ("Front office confirmed room only").
+  if (o.kind === 'rate' && o.note) return o.note;
+  return o.note ? `${what} - ${o.note}` : what;
+}
+
+/**
+ * Rooms a correction took off today's list ("not occupied"), so the door can still show them and
+ * put them back. Without this, a room marked by mistake stayed hidden until the next import.
+ */
+export function roomsRemovedToday(guests: Guest[], overrides: RoomOverride[], today: string): Array<{ guest: Guest; override: RoomOverride }> {
+  const byRoom = new Map(overrides.map((o) => [o.roomNumber, o]));
+  const out: Array<{ guest: Guest; override: RoomOverride }> = [];
+  for (const guest of guests) {
+    const override = byRoom.get(guest.roomNumber);
+    if (overrideApplies(override, guest, today) && override.occupied === false) out.push({ guest, override });
+  }
+  return out.sort((a, b) => a.guest.roomNumber.localeCompare(b.guest.roomNumber, undefined, { numeric: true }));
+}

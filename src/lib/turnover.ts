@@ -1,3 +1,5 @@
+import { bangkokTime } from './businessDate';
+
 /**
  * Table Turnover & Occupancy Duration Service
  * Computes elapsed dining duration, turnover stages, color coding, and visual styling
@@ -222,4 +224,18 @@ export function getTurnoverStyle(
         pulseAnimation: false,
       };
   }
+}
+
+/**
+ * When a party sat down, for display: "07:42" in Bangkok. Seating has stored an instant since
+ * 7 Oct 2026, and the screens printed it as it was stored - "2026-10-08T00:42:13.120Z". An older
+ * "07:42" is shown as stored; nothing gives ''.
+ */
+export function formatSeatedAt(occupiedSince: string | null | undefined): string {
+  const t = (occupiedSince ?? '').trim();
+  if (/^\d{4}-\d{2}-\d{2}T/.test(t)) {
+    const d = new Date(t);
+    if (!isNaN(d.getTime())) return bangkokTime(d);
+  }
+  return t;
 }

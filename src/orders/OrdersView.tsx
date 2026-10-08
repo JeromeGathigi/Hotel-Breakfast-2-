@@ -3,7 +3,7 @@ import { Plus, Search, ReceiptText } from 'lucide-react';
 import { Banner, btn } from '../components/ui';
 import { formatBusinessDateDisplay } from '../lib/businessDate';
 import { timeInBangkok } from '../lib/dates';
-import type { Role } from '../lib/access';
+import { canManage, type Role } from '../lib/access';
 import { channelLabel, formatThb, orderTotals, type Order, type OrderStatus } from './orderModel';
 import type { OrdersStore } from './store';
 import { NewOrderDialog } from './NewOrderDialog';
@@ -44,7 +44,7 @@ export const OrdersView: React.FC<{
   const [search, setSearch] = useState('');
   const [creating, setCreating] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
-  const manager = role === 'admin' || role === 'manager';
+  const manager = canManage(role);
   const isToday = date === today;
 
   const counts = useMemo(() => {

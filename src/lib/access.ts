@@ -9,9 +9,14 @@
  * the script did nothing at all.
  *
  *   admin    import Opera files, edit the floor plan, data maintenance, everything below
- *   manager  manifest, forecast, analytics, settings, audit log, everything below
- *   staff    the door: check-in, corrections, floor plan seating, menu
+ *   manager  manifest, forecast, analytics, sales, settings, audit log; on a Food Exchange bill:
+ *            discounts, complimentary payments, removing a payment, voiding a dish already
+ *            served, reopening a closed bill, marking dishes sold out; everything below
+ *   staff    the door (check-in, corrections, seating) and Food Exchange orders and kitchen
  *   none     signed in but not authorised - sees an explanation, nothing else
+ *
+ * ROLE_DUTIES below says the same in words for Settings > Access, and src/navigation.ts decides
+ * the screens from these functions - nothing else in the app compares role strings.
  */
 
 export type Role = 'admin' | 'manager' | 'staff' | 'none';
@@ -50,10 +55,28 @@ export function resolveRole({ email, emailVerified, claims }: AccessInput): Role
 export const canUseDoor = (r: Role) => r !== 'none';
 export const canManage = (r: Role) => r === 'admin' || r === 'manager';
 export const canImport = (r: Role) => r === 'admin';
+/** Tables and saved layouts. Seating, clearing and merging are door work (canUseDoor). */
+export const canEditFloorPlan = (r: Role) => r === 'admin';
+/** Settings > Data maintenance: permanently removes documents. */
+export const canMaintainData = (r: Role) => r === 'admin';
 
 export const ROLE_LABEL: Record<Role, string> = {
   admin: 'Administrator',
   manager: 'Manager',
   staff: 'Host stand',
   none: 'No access',
+};
+
+/** What each role adds to the one below it, for Settings > Access. */
+export const ROLE_DUTIES: Record<Exclude<Role, 'none'>, string[]> = {
+  staff: [
+    'Check-in, group check-in, corrections to a room for today, seating and clearing tables',
+    'Food Exchange (Novotel): orders, the kitchen screen and the menu; voiding a dish not yet served; payments by cash, card, QR or room charge; closing a bill',
+  ],
+  manager: [
+    'In-house manifest, meal forecast, analytics, Food Exchange sales and the CSV exports',
+    'On a bill: discounts, complimentary payments, removing a payment, voiding a dish already served, reopening a closed bill, marking dishes sold out',
+    'Settings: data status, rate codes, audit log',
+  ],
+  admin: ['Opera imports, editing the floor plan and saved layouts, data maintenance'],
 };
